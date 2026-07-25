@@ -6,6 +6,9 @@ use: `/api/alfred/*`, a shared-secret header, plain JSON, simple query params.
 Nothing here needs a user session, and there is no CORS handling — the token
 check is the whole access control.
 
+Reads are unrestricted. The single write — completing a routine task — requires
+an explicit two-step confirmation, described at the bottom of this document.
+
 ## Auth
 
 ```
@@ -16,7 +19,8 @@ Compared server-side against the `ALFRED_TOKEN` env var, in constant time.
 
 - Missing or wrong token → `401 {"error":"Unauthorized"}`
 - `ALFRED_TOKEN` unset on the server → `503`
-- Any method other than `GET` → `405`
+- A method an endpoint doesn't implement → `405` (every endpoint is `GET`-only
+  except `/api/alfred/tasks/complete`, which is `POST`)
 
 Generate a token with `openssl rand -hex 32` and set it on both sides.
 
@@ -188,12 +192,107 @@ lifespan table. It's a planning hint, not a quote.
 items can't be forecast at all, so a clean forecast may just mean missing
 install dates.
 
+## `GET /api/alfred/tasks`
+
+Routine maintenance jobs and when they're next due.
+
+| Param | Meaning |
+|---|---|
+| `home` | home id or name (optional) |
+| `status` | `due` (default) returns overdue + due-soon only; `all` returns everything including paused |
+
+```json
+{
+  "home": null,
+  "generatedAt": "2026-07-25T20:15:00.000Z",
+  "filter": "due",
+  "totals": { "returned": 2, "overdue": 1, "dueSoon": 1 },
+  "tasks": [
+    {
+      "id": "cm...",
+      "homeId": "cm...",
+      "homeName": "Main House",
+      "title": "Replace furnace filter",
+      "cadence": "every 3 months",
+      "intervalValue": 3,
+      "intervalUnit": "MONTH",
+      "appliance": { "id": "cm...", "name": "Basement furnace" },
+      "nextDueOn": "2026-07-15",
+      "lastCompletedOn": "2026-04-15",
+      "daysUntilDue": -10,
+      "status": "OVERDUE",
+      "active": true,
+      "notes": null
+    }
+  ]
+}
+```
+
+`status` per task is `OVERDUE`, `DUE_SOON` (within 14 days), or `UPCOMING`.
+`appliance` is `null` for home-level jobs. The default `due` filter means
+"what needs doing?" is a single call with no client-side filtering.
+
+## `POST /api/alfred/tasks/complete` — the only write
+
+**Two round trips, always.** Step 1 changes nothing; it exists so the user hears
+what will happen before it happens.
+
+### Step 1 — propose
+
+```json
+{
+  "taskId": "cm...",
+  "completedOn": "2026-07-25",
+  "notes": "Swapped for a MERV 11",
+  "vendor": "Nelson Plumbing",
+  "costUsd": 42.5
+}
+```
+
+Only `taskId` is required; `completedOn` defaults to today. Response:
+
+```json
+{
+  "status": "confirmation_required",
+  "summary": "Record \"Replace furnace filter\" (Basement furnace) at Main House as completed today. This adds an entry to the maintenance log and moves the next due date to 2026-10-25 (every 3 months).",
+  "confirmationToken": "9f2c...",
+  "expiresAt": "2026-07-25T20:20:00.000Z",
+  "instructions": "Read the summary to the user. If they agree, POST { confirmationToken } back to this endpoint. Nothing has been recorded yet.",
+  "task": { "id": "cm...", "title": "…", "currentNextDueOn": "2026-07-15", "lastCompletedOn": "2026-04-15" }
+}
+```
+
+### Step 2 — confirm
+
+```json
+{ "confirmationToken": "9f2c..." }
+```
+
+```json
+{
+  "status": "completed",
+  "summary": "…the same sentence the user agreed to…",
+  "maintenanceEntryId": "cm...",
+  "task": { "id": "cm...", "lastCompletedOn": "2026-07-25", "nextDueOn": "2026-10-25" }
+}
+```
+
+### Rules
+
+- Tokens are **single-use** — replaying one returns `409`.
+- Tokens **expire after five minutes** — a stale one returns `410`.
+- An unknown token returns `404`; an unknown `taskId` returns `404`.
+- Entries are stamped `loggedVia: ALFRED` and surface as "Alfred / Lucy" in the
+  app, so assistant-driven writes are never mistaken for someone's own entry.
+
 ## Notes for the Alfred side
 
 - Call `/api/alfred/homes` first to resolve names to ids if you want stable
   references; otherwise just pass the name through as `home`.
-- Everything is read-only. There is no endpoint that mutates state, by design.
-  A future "log that we replaced the water heater today" flow should be added
-  as a separate, explicitly confirmed write path — Gunderhouse should ask for
-  confirmation before recording anything, rather than trusting a parsed
-  utterance.
+- **Do not auto-confirm.** Sending step 1 and step 2 back to back defeats the
+  entire design. Speak the `summary` and wait for a real answer. If the user
+  says no, simply drop the token — it expires on its own.
+- The `summary` is written to be read aloud verbatim. Prefer it over composing
+  your own description, so what the user agrees to is exactly what gets written.
+- Completing a task is the only write. Everything else is read-only, and adding
+  further writes should follow this same propose/confirm shape.

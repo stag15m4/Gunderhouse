@@ -48,9 +48,50 @@ export async function GET(request: Request) {
             "'1' to include items that are not yet near replacement (optional)",
         },
       },
+      {
+        path: "/api/alfred/tasks",
+        description:
+          "Routine maintenance tasks and when they're next due, most urgent first.",
+        params: {
+          home: "home id or name (optional)",
+          status: "'due' (default: overdue and due soon) or 'all'",
+        },
+      },
+    ],
+    writes: [
+      {
+        path: "/api/alfred/tasks/complete",
+        method: "POST",
+        description: "Mark a routine task complete. Two steps, always.",
+        steps: [
+          {
+            step: 1,
+            body: {
+              taskId: "required",
+              completedOn: "YYYY-MM-DD (optional, defaults to today)",
+              notes: "optional",
+              vendor: "optional",
+              costUsd: "number, optional",
+            },
+            effect:
+              "Nothing is recorded. Returns a plain-language summary and a " +
+              "confirmationToken valid for 5 minutes.",
+          },
+          {
+            step: 2,
+            body: { confirmationToken: "the token from step 1" },
+            effect:
+              "Applies exactly what the summary described: logs a maintenance " +
+              "entry and rolls the task's due date forward.",
+          },
+        ],
+        expectation:
+          "Read the step 1 summary back to the user and get an explicit yes " +
+          "before sending step 2. Tokens are single-use.",
+      },
     ],
     notes:
-      "Writes are not part of this contract. Logging maintenance from Alfred " +
-      "would need an explicit confirm-first flow added separately.",
+      "Completing a routine task is the only write available. Everything else " +
+      "is read-only.",
   });
 }

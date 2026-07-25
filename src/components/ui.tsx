@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ForecastStatus } from "@/lib/forecast";
+import type { TaskStatus } from "@/lib/recurrence";
 
 export function PageHeader({
   title,
@@ -217,6 +218,27 @@ const FORECAST_TONE: Record<
 
 export function ForecastBadge({ status }: { status: ForecastStatus }) {
   const { tone, label } = FORECAST_TONE[status];
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+const TASK_TONE: Record<
+  TaskStatus,
+  { tone: "red" | "amber" | "neutral"; label: string }
+> = {
+  OVERDUE: { tone: "red", label: "Overdue" },
+  DUE_SOON: { tone: "amber", label: "Due soon" },
+  UPCOMING: { tone: "neutral", label: "Upcoming" },
+};
+
+export function TaskBadge({
+  status,
+  active,
+}: {
+  status: TaskStatus;
+  active: boolean;
+}) {
+  if (!active) return <Badge>Paused</Badge>;
+  const { tone, label } = TASK_TONE[status];
   return <Badge tone={tone}>{label}</Badge>;
 }
 

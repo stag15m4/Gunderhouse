@@ -34,23 +34,23 @@ enum HomeRole {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  name         String
-  passwordHash String
-  systemRole   SystemRole @default(MEMBER)
+  id                String     @id @default(cuid())
+  email             String     @unique
+  name              String
+  passwordHash      String
+  systemRole        SystemRole @default(MEMBER)
   /// Bumped whenever the password changes. Sessions issued before this moment
   /// are rejected, so a reset ends any session the old password had opened.
-  passwordChangedAt DateTime @default(now())
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  passwordChangedAt DateTime   @default(now())
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  memberships        HomeMembership[]
-  invitationsSent    Invitation[]       @relation("InvitationInvitedBy")
-  maintenanceLogged  MaintenanceEntry[] @relation("MaintenanceCreatedBy")
-  documentsUploaded  Document[]         @relation("DocumentUploadedBy")
-  passwordResets     PasswordReset[]    @relation("PasswordResetUser")
-  passwordResetsIssued PasswordReset[]  @relation("PasswordResetIssuedBy")
+  memberships          HomeMembership[]
+  invitationsSent      Invitation[]       @relation("InvitationInvitedBy")
+  maintenanceLogged    MaintenanceEntry[] @relation("MaintenanceCreatedBy")
+  documentsUploaded    Document[]         @relation("DocumentUploadedBy")
+  passwordResets       PasswordReset[]    @relation("PasswordResetUser")
+  passwordResetsIssued PasswordReset[]    @relation("PasswordResetIssuedBy")
 }
 
 /// A single-use link letting someone set a new password. Issued by a household
@@ -122,9 +122,9 @@ enum HomeType {
 }
 
 model Home {
-  id      String   @id @default(cuid())
-  name    String
-  type    HomeType @default(PRIMARY_RESIDENCE)
+  id   String   @id @default(cuid())
+  name String
+  type HomeType @default(PRIMARY_RESIDENCE)
 
   addressLine1 String?
   addressLine2 String?
@@ -143,6 +143,7 @@ model Home {
   memberships HomeMembership[]
   appliances  Appliance[]
   maintenance MaintenanceEntry[]
+  tasks       MaintenanceTask[]
   documents   Document[]
   invitations Invitation[]
 }
@@ -191,15 +192,16 @@ model Appliance {
   location     String?
 
   /// Date the unit was put into service (install date). Drives the forecast.
-  installedOn        DateTime?
-  warrantyExpiresOn  DateTime?
-  notes              String?
+  installedOn       DateTime?
+  warrantyExpiresOn DateTime?
+  notes             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   home        Home               @relation(fields: [homeId], references: [id], onDelete: Cascade)
   maintenance MaintenanceEntry[]
+  tasks       MaintenanceTask[]
 
   @@index([homeId])
 }
@@ -208,11 +210,20 @@ model Appliance {
 // Maintenance & repair log
 // ---------------------------------------------------------------------------
 
+/// Where an entry came from. Completing a routine task through Alfred or Lucy
+/// records ALFRED, so the log distinguishes assistant-driven writes.
+enum LogSource {
+  APP
+  ALFRED
+}
+
 model MaintenanceEntry {
-  id     String @id @default(cuid())
-  homeId String
+  id          String  @id @default(cuid())
+  homeId      String
   /// Null for home-level work that isn't tied to a specific appliance.
   applianceId String?
+  /// Set when this entry was the completion of a routine task.
+  taskId      String?
 
   performedOn DateTime
   description String
@@ -220,17 +231,87 @@ model MaintenanceEntry {
   costCents   Int?
   vendor      String?
   notes       String?
+  loggedVia   LogSource @default(APP)
 
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  home      Home       @relation(fields: [homeId], references: [id], onDelete: Cascade)
-  appliance Appliance? @relation(fields: [applianceId], references: [id], onDelete: SetNull)
-  createdBy User?      @relation("MaintenanceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  home      Home             @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  appliance Appliance?       @relation(fields: [applianceId], references: [id], onDelete: SetNull)
+  task      MaintenanceTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdBy User?            @relation("MaintenanceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([homeId, performedOn])
   @@index([applianceId])
+  @@index([taskId])
+}
+
+// ---------------------------------------------------------------------------
+// Routine (recurring) maintenance
+// ---------------------------------------------------------------------------
+
+enum RecurrenceUnit {
+  DAY
+  WEEK
+  MONTH
+  YEAR
+}
+
+/// A job that comes back on a schedule — furnace filter every 3 months, gutters
+/// every autumn. Optionally tied to an appliance; left loose when there's
+/// nothing to tie it to.
+///
+/// Completing one advances `nextDueOn` and writes a MaintenanceEntry, so the
+/// home keeps a single maintenance history rather than two parallel ones.
+model MaintenanceTask {
+  id          String  @id @default(cuid())
+  homeId      String
+  /// Null when the job isn't about one specific unit.
+  applianceId String?
+
+  title String
+  notes String?
+
+  intervalValue Int
+  intervalUnit  RecurrenceUnit
+
+  nextDueOn       DateTime
+  lastCompletedOn DateTime?
+  /// Paused tasks keep their history but stop showing up as due.
+  active          Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  home        Home               @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  appliance   Appliance?         @relation(fields: [applianceId], references: [id], onDelete: SetNull)
+  completions MaintenanceEntry[]
+
+  @@index([homeId, nextDueOn])
+  @@index([applianceId])
+}
+
+/// A pending write proposed by Alfred or Lucy, waiting on a human "yes".
+///
+/// The assistant asks first and gets back a summary plus this token; nothing
+/// changes until it sends the token back. Tokens are single-use and short-lived,
+/// so a stale or replayed confirmation can't write anything.
+model AlfredConfirmation {
+  id      String @id @default(cuid())
+  token   String @unique
+  action  String
+  /// Human-readable description of exactly what will happen, for the assistant
+  /// to read back before asking for confirmation.
+  summary String
+  /// The proposed write, applied verbatim on confirmation.
+  payload Json
+
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
 }
 
 // ---------------------------------------------------------------------------

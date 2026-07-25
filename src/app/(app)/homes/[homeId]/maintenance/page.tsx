@@ -5,7 +5,10 @@ import {
   createMaintenanceEntry,
   deleteMaintenanceEntry,
 } from "@/app/actions/maintenance";
+import { createTask, markTaskComplete } from "@/app/actions/tasks";
 import { formatDate, formatMoney } from "@/lib/format";
+import { sortTasks, toTaskView } from "@/lib/recurrence";
+import { TaskForm } from "@/components/TaskForm";
 import {
   Empty,
   Field,
@@ -13,6 +16,7 @@ import {
   PageHeader,
   SelectField,
   Section,
+  TaskBadge,
   TextareaField,
 } from "@/components/ui";
 
@@ -38,7 +42,7 @@ export default async function MaintenancePage({
         }
       : {};
 
-  const [entries, appliances, total] = await Promise.all([
+  const [entries, appliances, total, taskRows] = await Promise.all([
     prisma.maintenanceEntry.findMany({
       where: { homeId, ...yearFilter },
       orderBy: { performedOn: "desc" },
@@ -56,9 +60,15 @@ export default async function MaintenancePage({
       where: { homeId, ...yearFilter },
       _sum: { costCents: true },
     }),
+    prisma.maintenanceTask.findMany({
+      where: { homeId },
+      include: { appliance: { select: { name: true } } },
+    }),
   ]);
 
+  const tasks = sortTasks(taskRows.map((task) => toTaskView(task)));
   const logWork = createMaintenanceEntry.bind(null, homeId);
+  const addTask = createTask.bind(null, homeId);
 
   return (
     <>
@@ -72,6 +82,101 @@ export default async function MaintenancePage({
       />
 
       <FormError message={error} />
+
+      <Section
+        title="Routine tasks"
+        description="Jobs that repeat. Completing one logs it below and moves the due date forward."
+      >
+        {tasks.length === 0 ? (
+          <Empty>
+            Nothing scheduled yet. Add a recurring job below — filters, gutters,
+            servicing.
+          </Empty>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Item</th>
+                <th>How often</th>
+                <th>Next due</th>
+                <th>Last done</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((task) => (
+                <tr key={task.id}>
+                  <td>
+                    <div className="font-medium text-stone-900">{task.title}</div>
+                    {task.notes ? (
+                      <div className="text-xs text-stone-500">{task.notes}</div>
+                    ) : null}
+                  </td>
+                  <td className="text-xs">
+                    {task.applianceId ? (
+                      <Link
+                        className="hover:underline"
+                        href={`/homes/${homeId}/appliances/${task.applianceId}`}
+                      >
+                        {task.applianceName}
+                      </Link>
+                    ) : (
+                      <span className="text-stone-400">Home-level</span>
+                    )}
+                  </td>
+                  <td className="text-xs">{task.cadence}</td>
+                  <td className="whitespace-nowrap">
+                    {formatDate(task.nextDueOn)}
+                    <div className="mt-0.5">
+                      <TaskBadge status={task.status} active={task.active} />
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap text-xs text-stone-500">
+                    {task.lastCompletedOn
+                      ? formatDate(task.lastCompletedOn)
+                      : "Never"}
+                  </td>
+                  <td className="whitespace-nowrap text-right">
+                    {canEdit(role) ? (
+                      <>
+                        <form
+                          action={markTaskComplete.bind(null, homeId, task.id)}
+                        >
+                          <button className="btn-secondary" type="submit">
+                            Mark done
+                          </button>
+                        </form>
+                        <Link
+                          className="mt-1 block text-xs text-stone-500 hover:text-stone-900"
+                          href={`/homes/${homeId}/tasks/${task.id}/edit`}
+                        >
+                          Edit
+                        </Link>
+                      </>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {canEdit(role) ? (
+          <details className="mt-4 border-t border-stone-100 pt-4">
+            <summary className="cursor-pointer text-sm font-medium text-stone-700">
+              Add a routine task
+            </summary>
+            <div className="mt-4">
+              <TaskForm
+                action={addTask}
+                appliances={appliances}
+                submitLabel="Add task"
+              />
+            </div>
+          </details>
+        ) : null}
+      </Section>
 
       {canEdit(role) ? (
         <Section
