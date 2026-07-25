@@ -1,81 +1,155 @@
-# Gunderhouse → Alfred / Lucy integration
+# Gunderhouse — `/api/alfred/*` integration contract
 
-Read-only JSON endpoints, shaped to match the pattern the other integrations
-use: `/api/alfred/*`, a shared-secret header, plain JSON, simple query params.
+Complete external-caller reference. Accurate as of commit `b63679d`.
 
-Nothing here needs a user session, and there is no CORS handling — the token
-check is the whole access control.
+Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
+replacement forecasting, and routine tasks, plus exactly one write: completing a
+routine task, behind a two-step confirmation.
 
-Reads are unrestricted. The single write — completing a routine task — requires
-an explicit two-step confirmation, described at the bottom of this document.
+---
 
-## Auth
+## 1. Base URL
 
 ```
-X-Alfred-Token: <ALFRED_TOKEN>
+https://<your-gunderhouse-domain>
 ```
 
-Compared server-side against the `ALFRED_TOKEN` env var, in constant time.
+All paths below are relative to that origin.
 
-- Missing or wrong token → `401 {"error":"Unauthorized"}`
-- `ALFRED_TOKEN` unset on the server → `503`
-- A method an endpoint doesn't implement → `405` (every endpoint is `GET`-only
-  except `/api/alfred/tasks/complete`, which is `POST`)
+---
 
-Generate a token with `openssl rand -hex 32` and set it on both sides.
+## 2. Authentication
 
-## Conventions
+| | |
+|---|---|
+| Server env var | `ALFRED_TOKEN` |
+| Request header | `X-Alfred-Token: <token>` |
 
-- Dates are `YYYY-MM-DD` strings, never timestamps, except `generatedAt`.
-- Money is dollars as a number (`costUsd`), not cents.
-- The `home` param accepts a home **id or name** (case-insensitive), so a
-  spoken "the Oak Street rental" can be passed straight through. Omit it to
-  span every home. An unmatched value returns `404`.
+The token is compared server-side in constant time. There is no user session,
+no cookie, no CORS handling, and no per-home permission check — **the token is
+the entire access control**, so it grants read access to the whole household's
+data and the ability to complete routine tasks.
 
-## `GET /api/alfred`
+Auth failures:
 
-Self-describing index — every endpoint, its parameters, and a note that writes
-are out of scope. Useful as a one-call capability check.
+| Condition | Status | Body |
+|---|---|---|
+| Header missing or wrong | `401` | `{"error":"Unauthorized"}` |
+| `ALFRED_TOKEN` unset on the server | `503` | `{"error":"Integration is not configured."}` |
+| Method not implemented by that path | `405` | (framework default) |
 
-## `GET /api/alfred/homes`
+Every endpoint is `GET` except `/api/alfred/tasks/complete`, which is `POST`.
 
-No parameters.
+---
+
+## 3. Conventions
+
+- **Dates** are `YYYY-MM-DD` strings. The only exception is `generatedAt`, which
+  is a full ISO-8601 timestamp.
+- **Money** is dollars as a JSON number (`costUsd`, `estimatedReplacementCostUsd`),
+  never cents, never a string.
+- **`home` parameter** — accepted by every read endpoint except `/homes`. Takes a
+  home **id or name**, case-insensitive, so a spoken "the Oak Street rental" can
+  be passed through unmodified. `homeId` is accepted as an alias. Omit it to span
+  every home. An unmatched value returns:
+
+  ```json
+  { "error": "No home matches that identifier." }
+  ```
+
+  with status `404`.
+- **`home` in responses** echoes the resolved home as `{ "id", "name" }`, or is
+  `null` when the parameter was omitted.
+- Nullable fields are present and `null` rather than absent.
+
+---
+
+## 4. `GET /api/alfred`
+
+Self-describing index. No query parameters.
+
+```json
+{
+  "app": "gunderhouse",
+  "version": 1,
+  "access": "read-only",
+  "auth": { "header": "X-Alfred-Token" },
+  "endpoints": [
+    { "path": "/api/alfred/homes", "description": "...", "params": {} }
+  ],
+  "writes": [
+    {
+      "path": "/api/alfred/tasks/complete",
+      "method": "POST",
+      "description": "Mark a routine task complete. Two steps, always.",
+      "steps": [
+        { "step": 1, "body": {}, "effect": "..." },
+        { "step": 2, "body": {}, "effect": "..." }
+      ],
+      "expectation": "..."
+    }
+  ],
+  "notes": "Completing a routine task is the only write available. Everything else is read-only."
+}
+```
+
+Useful as a one-call capability check. The `access` field still reads
+`"read-only"`; treat the `writes` array as authoritative.
+
+---
+
+## 5. `GET /api/alfred/homes`
+
+No query parameters. Returns every home.
 
 ```json
 {
   "homes": [
     {
-      "id": "cm...",
+      "id": "cms0abc123",
       "name": "Main House",
       "type": "PRIMARY_RESIDENCE",
-      "address": { "line1": "14 Cedar Lane", "line2": null,
-                   "city": "Madison", "state": "WI", "postalCode": "53703" },
+      "address": {
+        "line1": "14 Cedar Lane",
+        "line2": null,
+        "city": "Madison",
+        "state": "WI",
+        "postalCode": "53703"
+      },
       "yearBuilt": 1998,
       "squareFeet": null,
       "purchasedOn": null,
       "notes": null,
-      "counts": { "appliances": 3, "maintenanceEntries": 2, "documents": 1 }
+      "counts": {
+        "appliances": 3,
+        "maintenanceEntries": 2,
+        "documents": 1
+      }
     }
   ]
 }
 ```
 
-`type` is `PRIMARY_RESIDENCE` or `RENTAL`.
+Sorted by `type`, then `name`.
 
-## `GET /api/alfred/appliances`
+---
 
-| Param | Meaning |
-|---|---|
-| `home` | home id or name (optional) |
-| `category` | one of the `ApplianceCategory` values (optional) |
+## 6. `GET /api/alfred/appliances`
+
+Appliances and whole-home systems.
+
+| Param | Required | Meaning |
+|---|---|---|
+| `home` | no | home id or name; omit for all homes |
+| `category` | no | one `ApplianceCategory` value; an unrecognised value is **silently ignored** rather than erroring |
 
 ```json
 {
-  "home": { "id": "cm...", "name": "Main House" },
+  "home": { "id": "cms0abc123", "name": "Main House" },
   "appliances": [
     {
-      "id": "cm...",
-      "homeId": "cm...",
+      "id": "cms0def456",
+      "homeId": "cms0abc123",
       "homeName": "Main House",
       "name": "Basement water heater",
       "category": "WATER_HEATER",
@@ -92,60 +166,73 @@ No parameters.
 }
 ```
 
-`home` is `null` when the parameter was omitted.
+Sorted by `installedOn` descending, then `name`.
 
-Categories include whole-home systems, not just appliances: `ROOF`, `FURNACE`,
-`AIR_CONDITIONER`, `SEPTIC_SYSTEM`, `WELL_PUMP`, and so on. The full list is
-the `ApplianceCategory` enum in `prisma/schema.prisma`.
+---
 
-## `GET /api/alfred/maintenance`
+## 7. `GET /api/alfred/maintenance`
 
-| Param | Meaning |
-|---|---|
-| `home` | home id or name (optional) |
-| `applianceId` | restrict to one appliance (optional) |
-| `from` | `YYYY-MM-DD`, inclusive (optional) |
-| `to` | `YYYY-MM-DD`, inclusive (optional) |
-| `limit` | default 100, max 500 (optional) |
+The maintenance and repair log.
+
+| Param | Required | Meaning |
+|---|---|---|
+| `home` | no | home id or name |
+| `applianceId` | no | restrict to one appliance |
+| `from` | no | `YYYY-MM-DD`, inclusive |
+| `to` | no | `YYYY-MM-DD`, inclusive |
+| `limit` | no | default `100`, maximum `500` |
 
 ```json
 {
-  "home": { "id": "cm...", "name": "Main House" },
+  "home": { "id": "cms0abc123", "name": "Main House" },
   "range": { "from": "2025-01-01", "to": "2025-12-31" },
   "totals": { "entries": 2, "costUsd": 1575.75 },
   "returned": 2,
   "entries": [
     {
-      "id": "cm...",
-      "homeId": "cm...",
+      "id": "cms0ghi789",
+      "homeId": "cms0abc123",
       "homeName": "Main House",
       "performedOn": "2025-09-02",
       "description": "Gutter cleaning",
       "costUsd": 325,
       "vendor": "TopSide",
       "notes": null,
-      "appliance": null,
+      "appliance": {
+        "id": "cms0def456",
+        "name": "Basement furnace",
+        "category": "FURNACE"
+      },
       "loggedBy": "Gunder"
     }
   ]
 }
 ```
 
-`totals` covers the whole filtered set; `entries` is capped by `limit`, so
-`totals.entries` may exceed `returned`. `appliance` is `null` for home-level
-work (roof, gutters, landscaping) that isn't tied to a specific unit.
+Notes:
 
-## `GET /api/alfred/forecast`
+- Sorted by `performedOn` descending.
+- `totals` covers the **whole filtered set**; `entries` is capped by `limit`, so
+  `totals.entries` may exceed `returned`.
+- `appliance` is `null` for home-level work (roof, gutters, landscaping).
+- `costUsd` is `null` when no cost was recorded.
+- `loggedBy` is the name of the person who recorded it, or `null`.
 
-| Param | Meaning |
-|---|---|
-| `home` | home id or name (optional) |
-| `includeOk` | `1` to also return items not yet near replacement (optional) |
+---
+
+## 8. `GET /api/alfred/forecast`
+
+Appliances measured against typical service life.
+
+| Param | Required | Meaning |
+|---|---|---|
+| `home` | no | home id or name |
+| `includeOk` | no | `"1"` to also return items that are not yet near replacement |
 
 ```json
 {
   "home": null,
-  "generatedAt": "2026-07-25T18:40:00.000Z",
+  "generatedAt": "2026-07-25T20:15:00.000Z",
   "basis": "Age since in-service date compared to a typical service-life range per category.",
   "totals": {
     "items": 2,
@@ -154,8 +241,8 @@ work (roof, gutters, landscaping) that isn't tied to a specific unit.
   },
   "items": [
     {
-      "applianceId": "cm...",
-      "homeId": "cm...",
+      "applianceId": "cms0def456",
+      "homeId": "cms0abc123",
       "homeName": "Main House",
       "name": "Basement water heater",
       "category": "WATER_HEATER",
@@ -173,33 +260,27 @@ work (roof, gutters, landscaping) that isn't tied to a specific unit.
 }
 ```
 
-`status` is one of:
+Notes:
 
-| | |
-|---|---|
-| `OVERDUE` | Older than the high end of its expected life |
-| `DUE_SOON` | At or past the low end — inside the replacement window |
-| `WATCH` | Within two years of the low end |
-| `OK` | Everything else (only returned with `includeOk=1`) |
+- Sorted most urgent first.
+- By default only non-`OK` items are returned, so "what's coming due?" needs no
+  client-side filtering.
+- Appliances with **no `installedOn` cannot be forecast** and are excluded
+  entirely. `totals.applianceCountWithoutInstallDate` reports how many — worth
+  surfacing, since an empty forecast may just mean missing install dates.
+- `estimatedReplacementCostUsd` comes from a rough per-category table. It is a
+  planning hint, not a quote, and may be `null`.
 
-By default only non-`OK` items are returned, so "what's coming due" is a
-single call with no filtering on Alfred's side.
+---
 
-`estimatedReplacementCostUsd` comes from a rough per-category figure in the
-lifespan table. It's a planning hint, not a quote.
+## 9. `GET /api/alfred/tasks`
 
-`applianceCountWithoutInstallDate` is worth surfacing when summarising — those
-items can't be forecast at all, so a clean forecast may just mean missing
-install dates.
+Routine (recurring) maintenance jobs and when they are next due.
 
-## `GET /api/alfred/tasks`
-
-Routine maintenance jobs and when they're next due.
-
-| Param | Meaning |
-|---|---|
-| `home` | home id or name (optional) |
-| `status` | `due` (default) returns overdue + due-soon only; `all` returns everything including paused |
+| Param | Required | Meaning |
+|---|---|---|
+| `home` | no | home id or name |
+| `status` | no | `"due"` (default) returns only `OVERDUE` + `DUE_SOON`; `"all"` returns everything including paused tasks. Any other value is treated as `"due"`. |
 
 ```json
 {
@@ -209,14 +290,14 @@ Routine maintenance jobs and when they're next due.
   "totals": { "returned": 2, "overdue": 1, "dueSoon": 1 },
   "tasks": [
     {
-      "id": "cm...",
-      "homeId": "cm...",
+      "id": "cms0jkl012",
+      "homeId": "cms0abc123",
       "homeName": "Main House",
       "title": "Replace furnace filter",
       "cadence": "every 3 months",
       "intervalValue": 3,
       "intervalUnit": "MONTH",
-      "appliance": { "id": "cm...", "name": "Basement furnace" },
+      "appliance": { "id": "cms0def456", "name": "Basement furnace" },
       "nextDueOn": "2026-07-15",
       "lastCompletedOn": "2026-04-15",
       "daysUntilDue": -10,
@@ -228,20 +309,29 @@ Routine maintenance jobs and when they're next due.
 }
 ```
 
-`status` per task is `OVERDUE`, `DUE_SOON` (within 14 days), or `UPCOMING`.
-`appliance` is `null` for home-level jobs. The default `due` filter means
-"what needs doing?" is a single call with no client-side filtering.
+Notes:
 
-## `POST /api/alfred/tasks/complete` — the only write
+- Sorted most urgent first; paused tasks sink to the bottom.
+- `appliance` is `null` for home-level jobs.
+- `daysUntilDue` is negative once overdue.
+- `cadence` is a ready-to-speak phrase (`"every 3 months"`, `"yearly"`).
+- Paused tasks report `active: false` and never carry a due status.
+
+---
+
+## 10. `POST /api/alfred/tasks/complete` — the only write
 
 **Two round trips, always.** Step 1 changes nothing; it exists so the user hears
-what will happen before it happens.
+what will happen before it happens. The endpoint dispatches on which body shape
+it receives.
 
 ### Step 1 — propose
 
+Request body:
+
 ```json
 {
-  "taskId": "cm...",
+  "taskId": "cms0jkl012",
   "completedOn": "2026-07-25",
   "notes": "Swapped for a MERV 11",
   "vendor": "Nelson Plumbing",
@@ -249,50 +339,164 @@ what will happen before it happens.
 }
 ```
 
-Only `taskId` is required; `completedOn` defaults to today. Response:
+| Field | Required | Type | Notes |
+|---|---|---|---|
+| `taskId` | **yes** | string | |
+| `completedOn` | no | string | `YYYY-MM-DD`; defaults to today |
+| `notes` | no | string | max 2000 chars |
+| `vendor` | no | string | max 200 chars |
+| `costUsd` | no | number | must be ≥ 0 |
+
+Response `200`:
 
 ```json
 {
   "status": "confirmation_required",
   "summary": "Record \"Replace furnace filter\" (Basement furnace) at Main House as completed today. This adds an entry to the maintenance log and moves the next due date to 2026-10-25 (every 3 months).",
-  "confirmationToken": "9f2c...",
+  "confirmationToken": "9f2c8a1b4e6d0c3f7a5b2e9d8c1f4a6b3e7d0c9f2a5b8e1d",
   "expiresAt": "2026-07-25T20:20:00.000Z",
   "instructions": "Read the summary to the user. If they agree, POST { confirmationToken } back to this endpoint. Nothing has been recorded yet.",
-  "task": { "id": "cm...", "title": "…", "currentNextDueOn": "2026-07-15", "lastCompletedOn": "2026-04-15" }
+  "task": {
+    "id": "cms0jkl012",
+    "title": "Replace furnace filter",
+    "homeName": "Main House",
+    "appliance": "Basement furnace",
+    "currentNextDueOn": "2026-07-15",
+    "lastCompletedOn": "2026-04-15"
+  }
 }
 ```
 
+**Nothing has been written at this point.**
+
 ### Step 2 — confirm
 
+Request body:
+
 ```json
-{ "confirmationToken": "9f2c..." }
+{ "confirmationToken": "9f2c8a1b4e6d0c3f7a5b2e9d8c1f4a6b3e7d0c9f2a5b8e1d" }
 ```
+
+Response `200`:
 
 ```json
 {
   "status": "completed",
-  "summary": "…the same sentence the user agreed to…",
-  "maintenanceEntryId": "cm...",
-  "task": { "id": "cm...", "lastCompletedOn": "2026-07-25", "nextDueOn": "2026-10-25" }
+  "summary": "Record \"Replace furnace filter\" (Basement furnace) at Main House as completed today. This adds an entry to the maintenance log and moves the next due date to 2026-10-25 (every 3 months).",
+  "maintenanceEntryId": "cms0mno345",
+  "task": {
+    "id": "cms0jkl012",
+    "title": "Replace furnace filter",
+    "lastCompletedOn": "2026-07-25",
+    "nextDueOn": "2026-10-25"
+  }
 }
 ```
 
-### Rules
+This writes a maintenance-log entry and rolls the task's due date forward, in
+one transaction.
 
-- Tokens are **single-use** — replaying one returns `409`.
-- Tokens **expire after five minutes** — a stale one returns `410`.
-- An unknown token returns `404`; an unknown `taskId` returns `404`.
-- Entries are stamped `loggedVia: ALFRED` and surface as "Alfred / Lucy" in the
-  app, so assistant-driven writes are never mistaken for someone's own entry.
+### Errors
 
-## Notes for the Alfred side
+| Condition | Status | Body |
+|---|---|---|
+| Body is not valid JSON | `400` | `{"error":"Body must be JSON."}` |
+| Body matches neither shape | `400` | `{"error":"Send either { taskId, ... } to propose, or { confirmationToken } to confirm.","details":["..."]}` |
+| `taskId` does not exist | `404` | `{"error":"No such task."}` |
+| Token not recognised | `404` | `{"error":"Unknown confirmation token."}` |
+| Task deleted between the two steps | `404` | `{"error":"The task no longer exists."}` |
+| Token already used | `409` | `{"error":"That confirmation was already used. Propose the change again."}` |
+| Token expired | `410` | `{"error":"That confirmation expired. Propose the change again."}` |
 
-- Call `/api/alfred/homes` first to resolve names to ids if you want stable
-  references; otherwise just pass the name through as `home`.
+### Rules for the calling assistant
+
 - **Do not auto-confirm.** Sending step 1 and step 2 back to back defeats the
-  entire design. Speak the `summary` and wait for a real answer. If the user
-  says no, simply drop the token — it expires on its own.
-- The `summary` is written to be read aloud verbatim. Prefer it over composing
-  your own description, so what the user agrees to is exactly what gets written.
-- Completing a task is the only write. Everything else is read-only, and adding
-  further writes should follow this same propose/confirm shape.
+  entire design. Speak the `summary`, wait for a real answer.
+- **Prefer the returned `summary` verbatim** over composing your own wording, so
+  what the user agrees to is exactly what gets written.
+- If the user declines, simply drop the token — it expires on its own. There is
+  no cancel call.
+- Tokens are **single-use** and expire **5 minutes** after issue.
+- Entries created this way are stamped internally as Alfred-sourced and display
+  as "Alfred / Lucy" in the app, so they are never mistaken for a person's own
+  entry.
+
+---
+
+## 11. Enum reference
+
+**`type`** (home) — `PRIMARY_RESIDENCE`, `RENTAL`
+
+**`category`** (appliance) — `WATER_HEATER`, `WATER_HEATER_TANKLESS`, `FURNACE`,
+`AIR_CONDITIONER`, `HEAT_PUMP`, `BOILER`, `ROOF`, `DISHWASHER`, `REFRIGERATOR`,
+`FREEZER`, `RANGE_OVEN`, `MICROWAVE`, `WASHER`, `DRYER`, `GARBAGE_DISPOSAL`,
+`WATER_SOFTENER`, `SUMP_PUMP`, `WELL_PUMP`, `SEPTIC_SYSTEM`,
+`GARAGE_DOOR_OPENER`, `GENERATOR`, `OTHER`
+
+**`status`** (forecast item) — `OVERDUE` (past the high end of expected life),
+`DUE_SOON` (at or past the low end), `WATCH` (within 2 years of the low end),
+`OK`
+
+**`status`** (routine task) — `OVERDUE`, `DUE_SOON` (within 14 days), `UPCOMING`
+
+**`intervalUnit`** (routine task) — `DAY`, `WEEK`, `MONTH`, `YEAR`
+
+---
+
+## 12. Worked examples
+
+```bash
+TOKEN='your-alfred-token'
+BASE='https://your-gunderhouse-domain'
+
+# All homes
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/homes"
+
+# Appliances at one home, by name
+curl -s -H "X-Alfred-Token: $TOKEN" \
+  "$BASE/api/alfred/appliances?home=Main%20House"
+
+# This year's maintenance spend at one home
+curl -s -H "X-Alfred-Token: $TOKEN" \
+  "$BASE/api/alfred/maintenance?home=Main%20House&from=2026-01-01&to=2026-12-31"
+
+# What's coming due everywhere
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/forecast"
+
+# What routine work is due
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/tasks"
+
+# Step 1 — propose a completion (writes nothing)
+curl -s -X POST -H "X-Alfred-Token: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"taskId":"cms0jkl012","notes":"Swapped for a MERV 11"}' \
+  "$BASE/api/alfred/tasks/complete"
+
+# Step 2 — confirm, after the user says yes
+curl -s -X POST -H "X-Alfred-Token: $TOKEN" -H "Content-Type: application/json" \
+  -d '{"confirmationToken":"9f2c8a1b..."}' \
+  "$BASE/api/alfred/tasks/complete"
+```
+
+---
+
+## 13. Not implemented
+
+These do not exist. Calling them returns `404` or `405`.
+
+- **No documents endpoint.** `/api/alfred/homes` reports `counts.documents` and
+  nothing further. This is deliberate: documents sit behind per-home permissions
+  in the app, and this surface has no user identity, so exposing them would hand
+  every stored insurance policy, lease, and receipt to anyone holding the token.
+- **No general maintenance write.** There is no way to add or edit an arbitrary
+  maintenance entry. The only write is completing an existing routine task.
+- **No appliance, home, task, or document creation or editing.**
+- **No delete of anything.**
+
+Known gaps in what does exist:
+
+- `/api/alfred/maintenance` entries omit `taskId` and `loggedVia`, so a caller
+  cannot tell which log entries were routine-task completions, or which ones it
+  wrote itself.
+
+Any future write should follow the same propose/confirm shape as
+`/api/alfred/tasks/complete` rather than accepting a single-shot mutation.
