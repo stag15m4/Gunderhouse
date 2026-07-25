@@ -72,7 +72,10 @@ Self-describing index. No query parameters.
 {
   "app": "gunderhouse",
   "version": 1,
-  "access": "read-only",
+  "access": {
+    "reads": "unrestricted",
+    "writes": "confirm-first; completing a routine task is the only one"
+  },
   "auth": { "header": "X-Alfred-Token" },
   "endpoints": [
     { "path": "/api/alfred/homes", "description": "...", "params": {} }
@@ -93,8 +96,8 @@ Self-describing index. No query parameters.
 }
 ```
 
-Useful as a one-call capability check. The `access` field still reads
-`"read-only"`; treat the `writes` array as authoritative.
+Useful as a one-call capability check: `access` summarises the posture and the
+`writes` array enumerates every mutating call.
 
 ---
 
@@ -186,7 +189,7 @@ The maintenance and repair log.
 {
   "home": { "id": "cms0abc123", "name": "Main House" },
   "range": { "from": "2025-01-01", "to": "2025-12-31" },
-  "totals": { "entries": 2, "costUsd": 1575.75 },
+  "totals": { "entries": 2, "costUsd": 367.5 },
   "returned": 2,
   "entries": [
     {
@@ -198,16 +201,39 @@ The maintenance and repair log.
       "costUsd": 325,
       "vendor": "TopSide",
       "notes": null,
+      "appliance": null,
+      "task": null,
+      "loggedBy": "Gunder",
+      "loggedVia": "APP"
+    },
+    {
+      "id": "cms0mno345",
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "performedOn": "2025-07-25",
+      "description": "Replace furnace filter",
+      "costUsd": 42.5,
+      "vendor": null,
+      "notes": "Swapped for a MERV 11",
       "appliance": {
         "id": "cms0def456",
         "name": "Basement furnace",
         "category": "FURNACE"
       },
-      "loggedBy": "Gunder"
+      "task": {
+        "id": "cms0jkl012",
+        "title": "Replace furnace filter"
+      },
+      "loggedBy": null,
+      "loggedVia": "ALFRED"
     }
   ]
 }
 ```
+
+The first entry is one-off home-level work someone logged in the app. The second
+is a routine-task completion confirmed through this integration — note `task`
+populated, `loggedBy` null, and `loggedVia: "ALFRED"`.
 
 Notes:
 
@@ -216,7 +242,13 @@ Notes:
   `totals.entries` may exceed `returned`.
 - `appliance` is `null` for home-level work (roof, gutters, landscaping).
 - `costUsd` is `null` when no cost was recorded.
-- `loggedBy` is the name of the person who recorded it, or `null`.
+- `task` is `null` for one-off work, and populated when the entry was the
+  completion of a routine task — the `id` matches `/api/alfred/tasks`, so a
+  caller can answer "when did we last do this one?" from the log.
+- `loggedBy` is the name of the person who recorded it, or `null` for entries
+  written through the integration.
+- `loggedVia` is `APP` (someone using Gunderhouse directly) or `ALFRED` (a
+  confirmed assistant write), letting a caller recognise its own entries.
 
 ---
 
@@ -439,6 +471,8 @@ one transaction.
 
 **`status`** (routine task) — `OVERDUE`, `DUE_SOON` (within 14 days), `UPCOMING`
 
+**`loggedVia`** (maintenance entry) — `APP`, `ALFRED`
+
 **`intervalUnit`** (routine task) — `DAY`, `WEEK`, `MONTH`, `YEAR`
 
 ---
@@ -492,11 +526,8 @@ These do not exist. Calling them returns `404` or `405`.
 - **No appliance, home, task, or document creation or editing.**
 - **No delete of anything.**
 
-Known gaps in what does exist:
-
-- `/api/alfred/maintenance` entries omit `taskId` and `loggedVia`, so a caller
-  cannot tell which log entries were routine-task completions, or which ones it
-  wrote itself.
+There is no `taskId` filter on `/api/alfred/maintenance`; entries carry `task`,
+so filter client-side, or call `/api/alfred/tasks` for current schedule state.
 
 Any future write should follow the same propose/confirm shape as
 `/api/alfred/tasks/complete` rather than accepting a single-shot mutation.

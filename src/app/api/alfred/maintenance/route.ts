@@ -53,6 +53,7 @@ export async function GET(request: Request) {
       include: {
         home: { select: { id: true, name: true } },
         appliance: { select: { id: true, name: true, category: true } },
+        task: { select: { id: true, title: true } },
         createdBy: { select: { name: true } },
       },
     }),
@@ -87,7 +88,15 @@ export async function GET(request: Request) {
             category: entry.appliance.category,
           }
         : null,
+      // Set when this entry was a routine-task completion rather than one-off
+      // work, so a caller can tell the two apart.
+      task: entry.task
+        ? { id: entry.task.id, title: entry.task.title }
+        : null,
       loggedBy: entry.createdBy?.name ?? null,
+      // APP for someone using Gunderhouse directly, ALFRED for a confirmed
+      // assistant write. Lets a caller recognise its own entries.
+      loggedVia: entry.loggedVia,
     })),
   });
 }

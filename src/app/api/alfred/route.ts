@@ -11,7 +11,10 @@ export async function GET(request: Request) {
   return NextResponse.json({
     app: "gunderhouse",
     version: 1,
-    access: "read-only",
+    access: {
+      reads: "unrestricted",
+      writes: "confirm-first; completing a routine task is the only one",
+    },
     auth: { header: "X-Alfred-Token" },
     endpoints: [
       {
@@ -29,7 +32,10 @@ export async function GET(request: Request) {
       },
       {
         path: "/api/alfred/maintenance",
-        description: "Maintenance and repair entries, most recent first.",
+        description:
+          "Maintenance and repair entries, most recent first. Entries carry " +
+          "`task` when they were a routine-task completion, and `loggedVia` " +
+          "(APP or ALFRED) identifying where the write came from.",
         params: {
           home: "home id or name (optional)",
           applianceId: "restrict to one appliance (optional)",
