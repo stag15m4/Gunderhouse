@@ -1,0 +1,249 @@
+// Gunderhouse — household / property management
+//
+// Design notes:
+// - Everything of substance (appliances, maintenance, documents) hangs off a Home.
+//   Homes are open-ended; nothing assumes a fixed number of them.
+// - Access is granted per home via HomeMembership. A user with systemRole OWNER is a
+//   household admin: they implicitly have ADMIN on every home and can invite people.
+//   Everyone else sees only the homes they hold a membership for.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// People & access
+// ---------------------------------------------------------------------------
+
+/// Household-wide standing. OWNER is a peer admin of the whole household.
+enum SystemRole {
+  OWNER
+  MEMBER
+}
+
+/// Per-home access level.
+enum HomeRole {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  systemRole   SystemRole @default(MEMBER)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  memberships        HomeMembership[]
+  invitationsSent    Invitation[]       @relation("InvitationInvitedBy")
+  maintenanceLogged  MaintenanceEntry[] @relation("MaintenanceCreatedBy")
+  documentsUploaded  Document[]         @relation("DocumentUploadedBy")
+}
+
+model HomeMembership {
+  id     String   @id @default(cuid())
+  userId String
+  homeId String
+  role   HomeRole @default(VIEWER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  home Home @relation(fields: [homeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, homeId])
+  @@index([homeId])
+}
+
+/// A pending invitation to join the household. Accepting it creates the User
+/// (and the initial home membership, if one was specified).
+model Invitation {
+  id         String     @id @default(cuid())
+  email      String
+  name       String
+  token      String     @unique
+  systemRole SystemRole @default(MEMBER)
+
+  /// Optional initial home grant, applied when the invitation is accepted.
+  homeId   String?
+  homeRole HomeRole?
+
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  invitedBy User  @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  home      Home? @relation(fields: [homeId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+}
+
+// ---------------------------------------------------------------------------
+// Homes
+// ---------------------------------------------------------------------------
+
+enum HomeType {
+  PRIMARY_RESIDENCE
+  RENTAL
+}
+
+model Home {
+  id      String   @id @default(cuid())
+  name    String
+  type    HomeType @default(PRIMARY_RESIDENCE)
+
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  state        String?
+  postalCode   String?
+
+  yearBuilt   Int?
+  squareFeet  Int?
+  purchasedOn DateTime?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships HomeMembership[]
+  appliances  Appliance[]
+  maintenance MaintenanceEntry[]
+  documents   Document[]
+  invitations Invitation[]
+}
+
+// ---------------------------------------------------------------------------
+// Appliances & home systems
+// ---------------------------------------------------------------------------
+
+/// Categories double as the key into the expected-lifespan table used by the
+/// forecast (see lib/lifespans.ts). Includes whole-home systems (roof, HVAC)
+/// alongside conventional appliances.
+enum ApplianceCategory {
+  WATER_HEATER
+  FURNACE
+  AIR_CONDITIONER
+  HEAT_PUMP
+  BOILER
+  ROOF
+  DISHWASHER
+  REFRIGERATOR
+  FREEZER
+  RANGE_OVEN
+  MICROWAVE
+  WASHER
+  DRYER
+  GARBAGE_DISPOSAL
+  WATER_SOFTENER
+  SUMP_PUMP
+  WELL_PUMP
+  SEPTIC_SYSTEM
+  GARAGE_DOOR_OPENER
+  GENERATOR
+  WATER_HEATER_TANKLESS
+  OTHER
+}
+
+model Appliance {
+  id     String @id @default(cuid())
+  homeId String
+
+  name         String
+  category     ApplianceCategory @default(OTHER)
+  brand        String?
+  modelNumber  String?
+  serialNumber String?
+  location     String?
+
+  /// Date the unit was put into service (install date). Drives the forecast.
+  installedOn        DateTime?
+  warrantyExpiresOn  DateTime?
+  notes              String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  home        Home               @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  maintenance MaintenanceEntry[]
+
+  @@index([homeId])
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance & repair log
+// ---------------------------------------------------------------------------
+
+model MaintenanceEntry {
+  id     String @id @default(cuid())
+  homeId String
+  /// Null for home-level work that isn't tied to a specific appliance.
+  applianceId String?
+
+  performedOn DateTime
+  description String
+  /// Stored in cents to keep money out of floating point.
+  costCents   Int?
+  vendor      String?
+  notes       String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  home      Home       @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  appliance Appliance? @relation(fields: [applianceId], references: [id], onDelete: SetNull)
+  createdBy User?      @relation("MaintenanceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([homeId, performedOn])
+  @@index([applianceId])
+}
+
+// ---------------------------------------------------------------------------
+// Document repository
+// ---------------------------------------------------------------------------
+
+enum DocumentCategory {
+  INSURANCE
+  WARRANTY
+  MANUAL
+  RECEIPT
+  LEASE
+  TAX
+  INSPECTION
+  OTHER
+}
+
+model Document {
+  id     String @id @default(cuid())
+  homeId String
+
+  title       String
+  category    DocumentCategory @default(OTHER)
+  description String?
+
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  /// Opaque key in whichever storage driver is configured (S3/R2 or local disk).
+  storageKey  String
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  home       Home  @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("DocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([homeId, category])
+}
