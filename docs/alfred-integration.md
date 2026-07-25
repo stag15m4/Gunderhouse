@@ -1,6 +1,6 @@
 # Gunderhouse — `/api/alfred/*` integration contract
 
-Complete external-caller reference. Accurate as of commit `b63679d`.
+Complete external-caller reference. Accurate as of commit `376d7ce`.
 
 Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
 replacement forecasting, and routine tasks, plus exactly one write: completing a
