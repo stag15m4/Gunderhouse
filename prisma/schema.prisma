@@ -39,6 +39,9 @@ model User {
   name         String
   passwordHash String
   systemRole   SystemRole @default(MEMBER)
+  /// Bumped whenever the password changes. Sessions issued before this moment
+  /// are rejected, so a reset ends any session the old password had opened.
+  passwordChangedAt DateTime @default(now())
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -46,6 +49,27 @@ model User {
   invitationsSent    Invitation[]       @relation("InvitationInvitedBy")
   maintenanceLogged  MaintenanceEntry[] @relation("MaintenanceCreatedBy")
   documentsUploaded  Document[]         @relation("DocumentUploadedBy")
+  passwordResets     PasswordReset[]    @relation("PasswordResetUser")
+  passwordResetsIssued PasswordReset[]  @relation("PasswordResetIssuedBy")
+}
+
+/// A single-use link letting someone set a new password. Issued by a household
+/// admin and handed over directly — same approach as invitations, so the app
+/// needs no email provider.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  issuedById String?
+  createdAt  DateTime @default(now())
+
+  user     User  @relation("PasswordResetUser", fields: [userId], references: [id], onDelete: Cascade)
+  issuedBy User? @relation("PasswordResetIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
 }
 
 model HomeMembership {

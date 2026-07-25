@@ -38,16 +38,84 @@ export function atLeast(role: HomeRole, minimum: HomeRole): boolean {
 export const canEdit = (role: HomeRole) => atLeast(role, HomeRole.MEMBER);
 export const canAdminister = (role: HomeRole) => atLeast(role, HomeRole.ADMIN);
 
-/** Current user, or a redirect to the sign-in page. */
-export async function requireUser(): Promise<SessionUser> {
+/**
+ * Current user, or a redirect to the sign-in page.
+ *
+ * The session is a JWT, so everything inside it is a snapshot from sign-in
+ * time. Authorization can't trust that: an account removed or demoted after
+ * the token was issued would otherwise keep its old powers until the token
+ * expired. So the account is re-read here on every request, and the session is
+ * rejected outright if the account is gone or its password has changed since
+ * the token was minted. One primary-key lookup per request is a fair price for
+ * role and password changes taking effect immediately.
+ */
+export type SessionCheck =
+  | { user: SessionUser; reason: null }
+  | { user: null; reason: "anonymous" | "account-gone" | "password-changed" };
+
+/**
+ * Resolve the session against the database without redirecting.
+ *
+ * Both requireUser() and the sign-in page go through this, so they agree on
+ * what counts as a usable session. If they disagreed — say the sign-in page
+ * trusted a token that requireUser() rejects — the two would bounce a visitor
+ * back and forth forever.
+ */
+export async function currentUser(): Promise<SessionCheck> {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
+  if (!session?.user?.id) return { user: null, reason: "anonymous" };
+
+  const account = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      systemRole: true,
+      passwordChangedAt: true,
+    },
+  });
+  if (!account) return { user: null, reason: "account-gone" };
+
+  const issuedAt = session.user.passwordChangedAt;
+  // Compared at second resolution: the token carries epoch ms taken from this
+  // same column, and rounding keeps sub-millisecond storage differences from
+  // reading as a password change. A token predating this field entirely has no
+  // stamp, and is treated as stale.
+  if (
+    issuedAt === undefined ||
+    Math.floor(account.passwordChangedAt.getTime() / 1000) >
+      Math.floor(issuedAt / 1000)
+  ) {
+    return { user: null, reason: "password-changed" };
+  }
+
   return {
-    id: session.user.id,
-    name: session.user.name ?? "",
-    email: session.user.email ?? "",
-    systemRole: session.user.systemRole,
+    user: {
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      systemRole: account.systemRole,
+    },
+    reason: null,
   };
+}
+
+const REJECTION_MESSAGE: Record<
+  Exclude<SessionCheck["reason"], null>,
+  string | null
+> = {
+  anonymous: null,
+  "account-gone": "That account no longer exists.",
+  "password-changed": "Your password changed. Please sign in again.",
+};
+
+export async function requireUser(): Promise<SessionUser> {
+  const { user, reason } = await currentUser();
+  if (user) return user;
+
+  const message = REJECTION_MESSAGE[reason];
+  redirect(message ? `/login?error=${encodeURIComponent(message)}` : "/login");
 }
 
 /** Current user, restricted to household admins. */

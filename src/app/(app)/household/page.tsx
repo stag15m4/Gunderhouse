@@ -2,9 +2,11 @@ import { HomeRole, SystemRole } from "@prisma/client";
 import { requireOwner } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import {
+  createPasswordReset,
   inviteMember,
   removeUser,
   revokeInvitation,
+  revokePasswordReset,
   setSystemRole,
 } from "@/app/actions/members";
 import { formatDate } from "@/lib/format";
@@ -27,12 +29,12 @@ import {
 export default async function HouseholdPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; invited?: string }>;
+  searchParams: Promise<{ error?: string; invited?: string; reset?: string }>;
 }) {
   const actor = await requireOwner();
-  const { error, invited } = await searchParams;
+  const { error, invited, reset } = await searchParams;
 
-  const [users, invitations, homes] = await Promise.all([
+  const [users, invitations, homes, passwordResets] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ systemRole: "asc" }, { name: "asc" }],
       include: {
@@ -47,6 +49,11 @@ export default async function HouseholdPage({
       include: { home: { select: { name: true } } },
     }),
     prisma.home.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.passwordReset.findMany({
+      where: { usedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { name: true, email: true } } },
+    }),
   ]);
 
   return (
@@ -60,6 +67,12 @@ export default async function HouseholdPage({
       {invited ? (
         <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           Invitation created. Copy its link below and send it to them.
+        </div>
+      ) : null}
+      {reset ? (
+        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Reset link created. Copy it from “Password resets” below and hand it
+          over.
         </div>
       ) : null}
 
@@ -116,11 +129,19 @@ export default async function HouseholdPage({
                     </ul>
                   )}
                 </td>
-                <td className="text-right">
+                <td className="whitespace-nowrap text-right">
+                  <form action={createPasswordReset.bind(null, user.id)}>
+                    <button
+                      className="text-xs text-stone-600 hover:text-stone-900"
+                      type="submit"
+                    >
+                      Reset password
+                    </button>
+                  </form>
                   {user.id === actor.id ? (
                     <span className="text-xs text-stone-400">You</span>
                   ) : (
-                    <form action={removeUser.bind(null, user.id)}>
+                    <form className="mt-1" action={removeUser.bind(null, user.id)}>
                       <button
                         className="text-xs text-red-600 hover:text-red-800"
                         type="submit"
@@ -138,6 +159,58 @@ export default async function HouseholdPage({
           {SYSTEM_ROLE_LABELS.OWNER}. Per-home roles are set on each home&apos;s
           Access tab.
         </p>
+      </Section>
+
+      <Section
+        title="Password resets"
+        description="Single-use links, valid 24 hours. Issuing a new one cancels any earlier link for that person."
+      >
+        {passwordResets.length === 0 ? (
+          <Empty>
+            No outstanding reset links. Use “Reset password” next to someone in
+            the list above.
+          </Empty>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th>Link</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {passwordResets.map((entry) => (
+                <tr key={entry.id}>
+                  <td>
+                    {entry.user.name}
+                    <div className="text-xs text-stone-500">
+                      {entry.user.email}
+                    </div>
+                  </td>
+                  <td>
+                    <code className="block break-all rounded bg-stone-100 px-2 py-1 text-xs">
+                      /reset/{entry.token}
+                    </code>
+                    <div className="mt-1 text-xs text-stone-500">
+                      Expires {formatDate(entry.expiresAt)}
+                    </div>
+                  </td>
+                  <td className="text-right">
+                    <form action={revokePasswordReset.bind(null, entry.id)}>
+                      <button
+                        className="text-xs text-red-600 hover:text-red-800"
+                        type="submit"
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </Section>
 
       <Section

@@ -35,34 +35,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           systemRole: user.systemRole,
+          passwordChangedAt: user.passwordChangedAt.getTime(),
         };
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user }) {
       if (user) {
         token.uid = user.id;
         token.systemRole = (user as { systemRole?: SystemRole }).systemRole;
-      }
-      // Re-read standing on session refresh so a role change takes effect
-      // without forcing the user to sign out.
-      if (trigger === "update" && token.uid) {
-        const fresh = await prisma.user.findUnique({
-          where: { id: token.uid as string },
-          select: { systemRole: true, name: true },
-        });
-        if (fresh) {
-          token.systemRole = fresh.systemRole;
-          token.name = fresh.name;
-        }
+        // Stamps when this session was issued relative to the account's
+        // password. requireUser() rejects the token if the password has
+        // changed since.
+        token.pwdAt = (user as { passwordChangedAt?: number }).passwordChangedAt;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.uid as string;
+        // Standing is carried for convenience only — requireUser() re-reads it
+        // from the database, which is what authorization actually trusts.
         session.user.systemRole = token.systemRole as SystemRole;
+        session.user.passwordChangedAt = token.pwdAt as number | undefined;
       }
       return session;
     },

@@ -51,6 +51,37 @@ Everyone else joins by invitation: **Household → Invite someone** produces a
 `/invite/<token>` link you pass along yourself (there's no mail sending
 configured, on purpose — it keeps the household off an email provider).
 
+## Passwords
+
+There is no default password anywhere. The seeded account uses whatever
+`SEED_OWNER_PASSWORD` you supply, and re-running the seed never overwrites an
+existing password.
+
+- **Someone forgot theirs** — a household admin clicks **Reset password** next
+  to them on the Household page. That produces a single-use `/reset/<token>`
+  link, valid 24 hours, which you hand over the same way as an invitation.
+  Issuing a new link cancels any earlier one for that person.
+- **Changing your own** — **Your account**, with the current password.
+- **Nobody can get in at all** — the one case no in-app button can solve. Run
+  the CLI against the database:
+
+  ```bash
+  RESET_EMAIL=you@example.com RESET_PASSWORD='new-password' \
+    npx tsx prisma/reset-password.ts
+  ```
+
+Any password change — reset link, self-service, or CLI — signs out every
+session that was opened with the old password.
+
+### Sessions
+
+Sessions are JWTs, so their contents are a snapshot from sign-in. Authorization
+never trusts that snapshot: `requireUser()` re-reads the account on every
+request and rejects the session if the account is gone, or if the password
+changed after the token was issued. Removing someone, or demoting them from
+household admin, therefore takes effect on their next click rather than
+whenever their token happens to expire.
+
 ## Deploying to Railway
 
 1. Create a Postgres service; Railway provides `DATABASE_URL`.
@@ -126,6 +157,7 @@ explicit confirm-first flow added separately — not bolted onto these routes.
 prisma/schema.prisma          data model
 src/auth.ts                   Auth.js configuration
 src/lib/access.ts             the access model, in one file
+prisma/reset-password.ts      CLI password reset, for a locked-out admin
 src/lib/forecast.ts           age-vs-lifespan classification
 src/lib/lifespans.ts          the lifespan table — edit estimates here
 src/lib/storage.ts            document storage drivers (s3 / local)
