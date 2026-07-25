@@ -66,7 +66,8 @@ export default async function EditTaskPage({
         {task.completions.length === 0 ? (
           <Empty>Not completed yet.</Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Date</th>
@@ -92,6 +93,7 @@ export default async function EditTaskPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 

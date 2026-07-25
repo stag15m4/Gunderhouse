@@ -93,78 +93,75 @@ export default async function MaintenancePage({
             servicing.
           </Empty>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>Item</th>
-                <th>How often</th>
-                <th>Next due</th>
-                <th>Last done</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={task.id}>
-                  <td>
-                    <div className="font-medium text-stone-900">{task.title}</div>
-                    {task.notes ? (
-                      <div className="text-xs text-stone-500">{task.notes}</div>
-                    ) : null}
-                  </td>
-                  <td className="text-xs">
+          /*
+           * A list rather than a table: "Mark done" is the action this page
+           * exists for, and in a table on a phone it ends up off the right edge
+           * behind a horizontal scroll.
+           */
+          <ul className="divide-y divide-[var(--border)]">
+            {tasks.map((task) => (
+              <li
+                key={task.id}
+                className="flex items-start gap-3 py-4 first:pt-0 last:pb-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-[var(--text)]">
+                    {task.title}
+                  </div>
+                  <div className="mt-0.5 text-xs text-[var(--subtle)]">
                     {task.applianceId ? (
                       <Link
-                        className="hover:underline"
+                        className="hover:text-[var(--text)]"
                         href={`/homes/${homeId}/appliances/${task.applianceId}`}
                       >
                         {task.applianceName}
                       </Link>
                     ) : (
-                      <span className="text-stone-400">Home-level</span>
+                      <span className="text-[var(--faint)]">Home-level</span>
                     )}
-                  </td>
-                  <td className="text-xs">{task.cadence}</td>
-                  <td className="whitespace-nowrap">
-                    {formatDate(task.nextDueOn)}
-                    <div className="mt-0.5">
-                      <TaskBadge status={task.status} active={task.active} />
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap text-xs text-stone-500">
+                    {" · "}
+                    {task.cadence}
+                  </div>
+                  <div className="mt-2">
+                    <TaskBadge status={task.status} active={task.active} />
+                  </div>
+                  <div className="mt-1.5 text-xs text-[var(--faint)]">
+                    Next due {formatDate(task.nextDueOn)}
+                    {" · Last done "}
                     {task.lastCompletedOn
                       ? formatDate(task.lastCompletedOn)
-                      : "Never"}
-                  </td>
-                  <td className="whitespace-nowrap text-right">
-                    {canEdit(role) ? (
-                      <>
-                        <form
-                          action={markTaskComplete.bind(null, homeId, task.id)}
-                        >
-                          <button className="btn-secondary" type="submit">
-                            Mark done
-                          </button>
-                        </form>
-                        <Link
-                          className="mt-1 block text-xs text-stone-500 hover:text-stone-900"
-                          href={`/homes/${homeId}/tasks/${task.id}/edit`}
-                        >
-                          Edit
-                        </Link>
-                      </>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      : "never"}
+                  </div>
+                  {task.notes ? (
+                    <div className="mt-1.5 text-xs text-[var(--subtle)]">
+                      {task.notes}
+                    </div>
+                  ) : null}
+                </div>
+
+                {canEdit(role) ? (
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <form action={markTaskComplete.bind(null, homeId, task.id)}>
+                      <button className="btn-secondary" type="submit">
+                        Mark done
+                      </button>
+                    </form>
+                    <Link
+                      className="text-xs text-[var(--subtle)] transition-colors hover:text-[var(--text)]"
+                      href={`/homes/${homeId}/tasks/${task.id}/edit`}
+                    >
+                      Edit
+                    </Link>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         )}
 
         {canEdit(role) ? (
-          <details className="mt-4 border-t border-stone-100 pt-4">
-            <summary className="cursor-pointer text-sm font-medium text-stone-700">
+          <details className="mt-4 border-t border-[var(--border-soft)] pt-4">
+            <summary className="cursor-pointer text-sm font-medium text-[var(--muted)]">
               Add a routine task
             </summary>
             <div className="mt-4">
@@ -224,7 +221,8 @@ export default async function MaintenancePage({
         {entries.length === 0 ? (
           <Empty>No maintenance logged yet.</Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Date</th>
@@ -244,10 +242,10 @@ export default async function MaintenancePage({
                   <td>
                     {entry.description}
                     {entry.notes ? (
-                      <div className="text-xs text-stone-500">{entry.notes}</div>
+                      <div className="text-xs text-[var(--subtle)]">{entry.notes}</div>
                     ) : null}
                     {entry.createdBy ? (
-                      <div className="text-xs text-stone-400">
+                      <div className="text-xs text-[var(--faint)]">
                         Logged by {entry.createdBy.name}
                       </div>
                     ) : null}
@@ -261,7 +259,7 @@ export default async function MaintenancePage({
                         {entry.appliance.name}
                       </Link>
                     ) : (
-                      <span className="text-stone-400">Home-level</span>
+                      <span className="text-[var(--faint)]">Home-level</span>
                     )}
                   </td>
                   <td>{entry.vendor ?? "—"}</td>
@@ -269,7 +267,7 @@ export default async function MaintenancePage({
                   <td className="whitespace-nowrap text-right">
                     {canEdit(role) ? (
                       <Link
-                        className="text-xs text-stone-500 hover:text-stone-900"
+                        className="text-xs text-[var(--subtle)] hover:text-[var(--text)]"
                         href={`/homes/${homeId}/maintenance/${entry.id}/edit`}
                       >
                         Edit
@@ -285,7 +283,7 @@ export default async function MaintenancePage({
                         )}
                       >
                         <button
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-red-400 hover:text-red-300"
                           type="submit"
                         >
                           Delete
@@ -297,6 +295,7 @@ export default async function MaintenancePage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </>

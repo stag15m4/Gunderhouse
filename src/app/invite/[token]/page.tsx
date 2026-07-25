@@ -26,10 +26,10 @@ export default async function InvitePage({
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
         <div className="card p-6">
-          <h1 className="text-lg font-semibold text-stone-900">
+          <h1 className="text-lg font-semibold text-[var(--text)]">
             This invitation is no longer valid
           </h1>
-          <p className="mt-2 text-sm text-stone-600">
+          <p className="mt-2 text-sm text-[var(--muted)]">
             {invitation.acceptedAt
               ? "It has already been used."
               : "It expired. Ask a household admin to send a new one."}
@@ -44,13 +44,13 @@ export default async function InvitePage({
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-stone-900">
+        <h1 className="text-2xl font-semibold text-[var(--text)]">
           Welcome to Gunderhouse, {invitation.name}
         </h1>
-        <p className="mt-2 text-sm text-stone-600">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           Choose a password for <strong>{invitation.email}</strong>.
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-stone-500">
+        <ul className="mt-3 space-y-1 text-sm text-[var(--subtle)]">
           <li>{SYSTEM_ROLE_LABELS[invitation.systemRole]}</li>
           {invitation.home && invitation.homeRole ? (
             <li>

@@ -72,12 +72,12 @@ export default async function DocumentsPage({
             <Field label="Description" name="description" />
             <div>
               <label className="label" htmlFor="file">
-                File <span className="text-red-600">*</span>
+                File <span className="text-red-400">*</span>
               </label>
               <input
-                className="mt-1 block w-full text-sm text-stone-700 file:mr-3 file:rounded-md
-                           file:border-0 file:bg-stone-800 file:px-3 file:py-2 file:text-sm
-                           file:text-white hover:file:bg-stone-700"
+                className="mt-1 block w-full text-sm text-[var(--muted)] file:mr-3 file:rounded-md
+                           file:border-0 file:bg-[var(--btn)] file:px-3 file:py-2 file:text-sm
+                           file:text-white hover:file:bg-[var(--btn)]"
                 id="file"
                 name="file"
                 type="file"
@@ -105,7 +105,8 @@ export default async function DocumentsPage({
               ]
             }
           >
-            <table className="table">
+            <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
               <thead>
                 <tr>
                   <th>Title</th>
@@ -119,22 +120,22 @@ export default async function DocumentsPage({
                   <tr key={doc.id}>
                     <td>
                       <a
-                        className="font-medium text-stone-900 hover:underline"
+                        className="font-medium text-[var(--text)] hover:underline"
                         href={`/api/documents/${doc.id}`}
                       >
                         {doc.title}
                       </a>
                       {doc.description ? (
-                        <div className="text-xs text-stone-500">
+                        <div className="text-xs text-[var(--subtle)]">
                           {doc.description}
                         </div>
                       ) : null}
                     </td>
-                    <td className="text-xs text-stone-500">
+                    <td className="text-xs text-[var(--subtle)]">
                       {doc.fileName}
                       <div>{formatBytes(doc.sizeBytes)}</div>
                     </td>
-                    <td className="whitespace-nowrap text-xs text-stone-500">
+                    <td className="whitespace-nowrap text-xs text-[var(--subtle)]">
                       {formatDate(doc.createdAt)}
                       {doc.uploadedBy ? <div>by {doc.uploadedBy.name}</div> : null}
                     </td>
@@ -142,7 +143,7 @@ export default async function DocumentsPage({
                       {canAdminister(role) ? (
                         <form action={deleteDocument.bind(null, homeId, doc.id)}>
                           <button
-                            className="text-xs text-red-600 hover:text-red-800"
+                            className="text-xs text-red-400 hover:text-red-300"
                             type="submit"
                           >
                             Delete
@@ -154,6 +155,7 @@ export default async function DocumentsPage({
                 ))}
               </tbody>
             </table>
+          </div>
           </Section>
         ))
       )}

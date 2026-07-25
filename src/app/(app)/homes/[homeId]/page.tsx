@@ -72,7 +72,7 @@ export default async function HomeOverviewPage({
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Type" value={HOME_TYPE_LABELS[home.type]} />
         <Stat label="Appliances & systems" value={String(appliances.length)} />
         <Stat
@@ -87,7 +87,7 @@ export default async function HomeOverviewPage({
         description="Based on in-service date versus typical service life."
         actions={
           <Link
-            className="text-sm text-stone-600 hover:text-stone-900"
+            className="text-sm text-[var(--muted)] hover:text-[var(--text)]"
             href="/forecast"
           >
             Full forecast →
@@ -100,7 +100,8 @@ export default async function HomeOverviewPage({
             forecast.
           </Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Item</th>
@@ -114,18 +115,18 @@ export default async function HomeOverviewPage({
                 <tr key={item.applianceId}>
                   <td>
                     <Link
-                      className="font-medium text-stone-900 hover:underline"
+                      className="font-medium text-[var(--text)] hover:underline"
                       href={`/homes/${homeId}/appliances/${item.applianceId}`}
                     >
                       {item.name}
                     </Link>
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {APPLIANCE_CATEGORY_LABELS[item.category]}
                     </div>
                   </td>
                   <td>
                     {formatDate(item.installedOn)}
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {item.ageYears} yrs old
                     </div>
                   </td>
@@ -139,6 +140,7 @@ export default async function HomeOverviewPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 
@@ -146,7 +148,7 @@ export default async function HomeOverviewPage({
         title="Recent maintenance"
         actions={
           <Link
-            className="text-sm text-stone-600 hover:text-stone-900"
+            className="text-sm text-[var(--muted)] hover:text-[var(--text)]"
             href={`/homes/${homeId}/maintenance`}
           >
             Full log →
@@ -156,7 +158,8 @@ export default async function HomeOverviewPage({
         {recentMaintenance.length === 0 ? (
           <Empty>No maintenance logged yet.</Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Date</th>
@@ -173,7 +176,7 @@ export default async function HomeOverviewPage({
                   </td>
                   <td>
                     {entry.description}
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {entry.appliance?.name ?? "Home-level"}
                     </div>
                   </td>
@@ -183,18 +186,19 @@ export default async function HomeOverviewPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 
       {home.notes ? (
         <Section title="Notes">
-          <p className="whitespace-pre-wrap text-sm text-stone-700">
+          <p className="whitespace-pre-wrap text-sm text-[var(--muted)]">
             {home.notes}
           </p>
         </Section>
       ) : null}
 
-      <div className="mb-6 grid gap-4 text-sm text-stone-600 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 text-sm text-[var(--muted)] sm:grid-cols-3">
         <Fact label="Year built" value={home.yearBuilt?.toString()} />
         <Fact
           label="Square feet"
@@ -203,7 +207,7 @@ export default async function HomeOverviewPage({
         <Fact label="Purchased" value={formatDate(home.purchasedOn)} />
       </div>
 
-      <p className="text-xs text-stone-500">
+      <p className="text-xs text-[var(--subtle)]">
         Your access to this home: <Badge>{HOME_ROLE_SHORT[role]}</Badge>
       </p>
     </>
@@ -213,10 +217,10 @@ export default async function HomeOverviewPage({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="card p-4">
-      <div className="text-xs uppercase tracking-wide text-stone-500">
+      <div className="text-xs uppercase tracking-wide text-[var(--subtle)]">
         {label}
       </div>
-      <div className="mt-1 text-lg font-semibold text-stone-900">{value}</div>
+      <div className="mt-1 text-lg font-semibold text-[var(--text)]">{value}</div>
     </div>
   );
 }
@@ -224,7 +228,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Fact({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <span className="text-stone-500">{label}: </span>
+      <span className="text-[var(--subtle)]">{label}: </span>
       <span>{value || "—"}</span>
     </div>
   );

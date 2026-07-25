@@ -42,7 +42,8 @@ export default async function AppliancesPage({
             here too.
           </Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Name</th>
@@ -60,13 +61,13 @@ export default async function AppliancesPage({
                   <tr key={appliance.id}>
                     <td>
                       <Link
-                        className="font-medium text-stone-900 hover:underline"
+                        className="font-medium text-[var(--text)] hover:underline"
                         href={`/homes/${homeId}/appliances/${appliance.id}`}
                       >
                         {appliance.name}
                       </Link>
                       {appliance.brand ? (
-                        <div className="text-xs text-stone-500">
+                        <div className="text-xs text-[var(--subtle)]">
                           {appliance.brand}
                           {appliance.modelNumber
                             ? ` · ${appliance.modelNumber}`
@@ -86,7 +87,7 @@ export default async function AppliancesPage({
                       {forecast ? (
                         <ForecastBadge status={forecast.status} />
                       ) : (
-                        <span className="text-xs text-stone-400">
+                        <span className="text-xs text-[var(--faint)]">
                           No in-service date
                         </span>
                       )}
@@ -96,6 +97,7 @@ export default async function AppliancesPage({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </>

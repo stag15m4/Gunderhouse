@@ -21,6 +21,7 @@ import {
   Empty,
   Field,
   FormError,
+  Notice,
   PageHeader,
   SelectField,
   Section,
@@ -65,19 +66,16 @@ export default async function HouseholdPage({
 
       <FormError message={error} />
       {invited ? (
-        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Invitation created. Copy its link below and send it to them.
-        </div>
+        <Notice>Invitation created. Copy its link below and send it to them.</Notice>
       ) : null}
       {reset ? (
-        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Reset link created. Copy it from “Password resets” below and hand it
-          over.
-        </div>
+        <Notice>Reset link created. Copy it from “Password resets” below and hand it
+          over.</Notice>
       ) : null}
 
       <Section title="Members">
-        <table className="table">
+        <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
           <thead>
             <tr>
               <th>Person</th>
@@ -91,7 +89,7 @@ export default async function HouseholdPage({
               <tr key={user.id}>
                 <td>
                   {user.name}
-                  <div className="text-xs text-stone-500">{user.email}</div>
+                  <div className="text-xs text-[var(--subtle)]">{user.email}</div>
                 </td>
                 <td>
                   <form
@@ -118,7 +116,7 @@ export default async function HouseholdPage({
                   {user.systemRole === SystemRole.OWNER ? (
                     <Badge tone="green">All homes</Badge>
                   ) : user.memberships.length === 0 ? (
-                    <span className="text-xs text-stone-400">None yet</span>
+                    <span className="text-xs text-[var(--faint)]">None yet</span>
                   ) : (
                     <ul className="space-y-0.5 text-xs">
                       {user.memberships.map((m) => (
@@ -132,18 +130,18 @@ export default async function HouseholdPage({
                 <td className="whitespace-nowrap text-right">
                   <form action={createPasswordReset.bind(null, user.id)}>
                     <button
-                      className="text-xs text-stone-600 hover:text-stone-900"
+                      className="text-xs text-[var(--muted)] hover:text-[var(--text)]"
                       type="submit"
                     >
                       Reset password
                     </button>
                   </form>
                   {user.id === actor.id ? (
-                    <span className="text-xs text-stone-400">You</span>
+                    <span className="text-xs text-[var(--faint)]">You</span>
                   ) : (
                     <form className="mt-1" action={removeUser.bind(null, user.id)}>
                       <button
-                        className="text-xs text-red-600 hover:text-red-800"
+                        className="text-xs text-red-400 hover:text-red-300"
                         type="submit"
                       >
                         Remove
@@ -155,7 +153,8 @@ export default async function HouseholdPage({
             ))}
           </tbody>
         </table>
-        <p className="mt-3 text-xs text-stone-500">
+          </div>
+        <p className="mt-3 text-xs text-[var(--subtle)]">
           {SYSTEM_ROLE_LABELS.OWNER}. Per-home roles are set on each home&apos;s
           Access tab.
         </p>
@@ -171,7 +170,8 @@ export default async function HouseholdPage({
             the list above.
           </Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Person</th>
@@ -184,22 +184,22 @@ export default async function HouseholdPage({
                 <tr key={entry.id}>
                   <td>
                     {entry.user.name}
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {entry.user.email}
                     </div>
                   </td>
                   <td>
-                    <code className="block break-all rounded bg-stone-100 px-2 py-1 text-xs">
+                    <code className="block break-all rounded bg-[var(--surface-solid)] px-2 py-1 text-xs">
                       /reset/{entry.token}
                     </code>
-                    <div className="mt-1 text-xs text-stone-500">
+                    <div className="mt-1 text-xs text-[var(--subtle)]">
                       Expires {formatDate(entry.expiresAt)}
                     </div>
                   </td>
                   <td className="text-right">
                     <form action={revokePasswordReset.bind(null, entry.id)}>
                       <button
-                        className="text-xs text-red-600 hover:text-red-800"
+                        className="text-xs text-red-400 hover:text-red-300"
                         type="submit"
                       >
                         Cancel
@@ -210,6 +210,7 @@ export default async function HouseholdPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 
@@ -220,7 +221,8 @@ export default async function HouseholdPage({
         {invitations.length === 0 ? (
           <Empty>No pending invitations.</Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Person</th>
@@ -234,7 +236,7 @@ export default async function HouseholdPage({
                 <tr key={invitation.id}>
                   <td>
                     {invitation.name}
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {invitation.email}
                     </div>
                   </td>
@@ -243,24 +245,24 @@ export default async function HouseholdPage({
                       ? "Household admin"
                       : "Member"}
                     {invitation.home && invitation.homeRole ? (
-                      <div className="text-stone-500">
+                      <div className="text-[var(--subtle)]">
                         {invitation.home.name} —{" "}
                         {HOME_ROLE_SHORT[invitation.homeRole]}
                       </div>
                     ) : null}
                   </td>
                   <td>
-                    <code className="block break-all rounded bg-stone-100 px-2 py-1 text-xs">
+                    <code className="block break-all rounded bg-[var(--surface-solid)] px-2 py-1 text-xs">
                       /invite/{invitation.token}
                     </code>
-                    <div className="mt-1 text-xs text-stone-500">
+                    <div className="mt-1 text-xs text-[var(--subtle)]">
                       Expires {formatDate(invitation.expiresAt)}
                     </div>
                   </td>
                   <td className="text-right">
                     <form action={revokeInvitation.bind(null, invitation.id)}>
                       <button
-                        className="text-xs text-red-600 hover:text-red-800"
+                        className="text-xs text-red-400 hover:text-red-300"
                         type="submit"
                       >
                         Revoke
@@ -271,6 +273,7 @@ export default async function HouseholdPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 

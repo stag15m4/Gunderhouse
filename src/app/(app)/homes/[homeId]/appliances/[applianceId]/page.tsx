@@ -80,7 +80,7 @@ export default async function ApplianceDetailPage({
           />
         </dl>
         {appliance.notes ? (
-          <p className="mt-4 whitespace-pre-wrap border-t border-stone-100 pt-4 text-sm text-stone-700">
+          <p className="mt-4 whitespace-pre-wrap border-t border-[var(--border-soft)] pt-4 text-sm text-[var(--muted)]">
             {appliance.notes}
           </p>
         ) : null}
@@ -88,7 +88,7 @@ export default async function ApplianceDetailPage({
 
       <Section title="Forecast">
         {forecast ? (
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-stone-700">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--muted)]">
             <ForecastBadge status={forecast.status} />
             <span>{forecast.ageYears} years in service</span>
             <span>
@@ -121,7 +121,8 @@ export default async function ApplianceDetailPage({
         {appliance.maintenance.length === 0 ? (
           <Empty>Nothing logged for this item yet.</Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Date</th>
@@ -139,7 +140,7 @@ export default async function ApplianceDetailPage({
                   <td>
                     {entry.description}
                     {entry.notes ? (
-                      <div className="text-xs text-stone-500">{entry.notes}</div>
+                      <div className="text-xs text-[var(--subtle)]">{entry.notes}</div>
                     ) : null}
                   </td>
                   <td>{entry.vendor ?? "—"}</td>
@@ -148,6 +149,7 @@ export default async function ApplianceDetailPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 
@@ -185,8 +187,8 @@ export default async function ApplianceDetailPage({
 function Detail({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-stone-500">{label}</dt>
-      <dd className="text-stone-800">{value || "—"}</dd>
+      <dt className="text-xs uppercase tracking-wide text-[var(--subtle)]">{label}</dt>
+      <dd className="text-[var(--text)]">{value || "—"}</dd>
     </div>
   );
 }

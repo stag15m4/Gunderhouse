@@ -25,10 +25,10 @@ export default async function ResetPasswordPage({
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
         <div className="card p-6">
-          <h1 className="text-lg font-semibold text-stone-900">
+          <h1 className="text-lg font-semibold text-[var(--text)]">
             This reset link is no longer valid
           </h1>
-          <p className="mt-2 text-sm text-stone-600">
+          <p className="mt-2 text-sm text-[var(--muted)]">
             {reset?.usedAt
               ? "It has already been used. Ask a household admin for a new one."
               : "It may have expired, or been replaced by a newer link. Ask a household admin for a new one."}
@@ -43,13 +43,13 @@ export default async function ResetPasswordPage({
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-stone-900">
+        <h1 className="text-2xl font-semibold text-[var(--text)]">
           Set a new password
         </h1>
-        <p className="mt-2 text-sm text-stone-600">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           For <strong>{reset.user.email}</strong>.
         </p>
-        <p className="mt-2 text-xs text-stone-500">
+        <p className="mt-2 text-xs text-[var(--subtle)]">
           Anyone still signed in as {reset.user.name} will be signed out.
         </p>
       </div>

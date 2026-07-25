@@ -1,6 +1,13 @@
 import Link from "next/link";
 import type { ForecastStatus } from "@/lib/forecast";
 import type { TaskStatus } from "@/lib/recurrence";
+import {
+  IconAlert,
+  IconCheck,
+  IconChevronLeft,
+  IconClock,
+  IconPause,
+} from "@/components/icons";
 
 export function PageHeader({
   title,
@@ -16,20 +23,21 @@ export function PageHeader({
   backLabel?: string;
 }) {
   return (
-    <div className="mb-6">
+    <div className="mb-5">
       {backHref ? (
         <Link
           href={backHref}
-          className="text-sm text-stone-500 hover:text-stone-800"
+          className="inline-flex items-center gap-1 text-sm text-[var(--subtle)] transition-colors hover:text-[var(--text)]"
         >
-          ← {backLabel ?? "Back"}
+          <IconChevronLeft className="h-4 w-4" />
+          {backLabel ?? "Back"}
         </Link>
       ) : null}
-      <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-stone-900">{title}</h1>
+          <h1 className="text-xl font-medium text-[var(--text)]">{title}</h1>
           {subtitle ? (
-            <p className="mt-1 text-sm text-stone-500">{subtitle}</p>
+            <p className="mt-1 text-sm text-[var(--subtle)]">{subtitle}</p>
           ) : null}
         </div>
         {actions ? <div className="flex gap-2">{actions}</div> : null}
@@ -38,6 +46,7 @@ export function PageHeader({
   );
 }
 
+/** The core visual unit: one card per section of content. */
 export function Section({
   title,
   description,
@@ -50,25 +59,55 @@ export function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="card mb-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 px-4 py-3">
+    <section className="card p-5">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-600">
-            {title}
-          </h2>
+          <h2 className="eyebrow">{title}</h2>
           {description ? (
-            <p className="mt-0.5 text-xs text-stone-500">{description}</p>
+            <p className="mt-1.5 text-xs text-[var(--subtle)]">{description}</p>
           ) : null}
         </div>
         {actions}
       </div>
-      <div className="px-4 py-4">{children}</div>
+      {children}
     </section>
   );
 }
 
+/**
+ * Related sub-sections inside a single card, separated by rules rather than
+ * split into several cards.
+ */
+export function SplitCard({ children }: { children: React.ReactNode }) {
+  return (
+    <section className="card p-5">
+      <div className="divide-y divide-[var(--border)]">{children}</div>
+    </section>
+  );
+}
+
+export function SplitPane({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="py-4 first:pt-0 last:pb-0">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="eyebrow">{title}</h2>
+        {actions}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-2 text-sm text-stone-500">{children}</p>;
+  return <p className="py-1 text-sm text-[var(--subtle)]">{children}</p>;
 }
 
 export function Field({
@@ -94,7 +133,7 @@ export function Field({
     <div>
       <label className="label" htmlFor={name}>
         {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        {required ? <span className="text-[var(--accent)]"> *</span> : null}
       </label>
       <input
         className="input"
@@ -106,7 +145,9 @@ export function Field({
         placeholder={placeholder}
         defaultValue={defaultValue ?? undefined}
       />
-      {hint ? <p className="mt-1 text-xs text-stone-500">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1.5 text-xs text-[var(--faint)]">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -130,7 +171,7 @@ export function TextareaField({
     <div>
       <label className="label" htmlFor={name}>
         {label}
-        {required ? <span className="text-red-600"> *</span> : null}
+        {required ? <span className="text-[var(--accent)]"> *</span> : null}
       </label>
       <textarea
         className="input"
@@ -178,7 +219,9 @@ export function SelectField({
           </option>
         ))}
       </select>
-      {hint ? <p className="mt-1 text-xs text-stone-500">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1.5 text-xs text-[var(--faint)]">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -188,66 +231,195 @@ export function Badge({
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "red" | "amber" | "blue" | "green";
+  tone?: "neutral" | "red" | "amber" | "accent" | "green";
 }) {
   const tones = {
-    neutral: "bg-stone-100 text-stone-700",
-    red: "bg-red-100 text-red-800",
-    amber: "bg-amber-100 text-amber-900",
-    blue: "bg-blue-100 text-blue-800",
-    green: "bg-emerald-100 text-emerald-800",
+    neutral: "border-[var(--border)] bg-[var(--surface-solid)] text-[var(--muted)]",
+    red: "border-red-500/40 bg-red-500/10 text-red-300",
+    amber: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    accent: "border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent)]",
+    green: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
   } as const;
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${tones[tone]}`}
     >
       {children}
     </span>
   );
 }
 
-const FORECAST_TONE: Record<
-  ForecastStatus,
-  { tone: "red" | "amber" | "blue" | "green"; label: string }
-> = {
-  OVERDUE: { tone: "red", label: "Past expected life" },
-  DUE_SOON: { tone: "amber", label: "Replacement window" },
-  WATCH: { tone: "blue", label: "Within 2 years" },
-  OK: { tone: "green", label: "OK" },
+// ---------------------------------------------------------------------------
+// Status lamps
+// ---------------------------------------------------------------------------
+
+type Lamp = "red" | "amber" | "green" | "idle";
+
+const LAMP_STYLES: Record<Lamp, string> = {
+  red: "border-red-500/40 bg-red-500/15 text-red-400 shadow-[0_0_14px_rgba(248,113,113,0.4)]",
+  amber:
+    "border-amber-500/40 bg-amber-500/15 text-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.35)]",
+  green:
+    "border-emerald-500/40 bg-emerald-500/15 text-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.35)]",
+  idle: "border-[var(--border)] bg-[var(--surface-solid)] text-[var(--subtle)]",
 };
 
-export function ForecastBadge({ status }: { status: ForecastStatus }) {
-  const { tone, label } = FORECAST_TONE[status];
-  return <Badge tone={tone}>{label}</Badge>;
+/**
+ * The glowing lamp. Full size for detail views; `sm` for table rows, where a
+ * 44px circle per row would overwhelm the data it's annotating.
+ */
+export function StatusLamp({
+  tone,
+  size = "sm",
+  children,
+}: {
+  tone: Lamp;
+  size?: "sm" | "lg";
+  children: React.ReactNode;
+}) {
+  const box = size === "lg" ? "h-11 w-11" : "h-7 w-7";
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-full border ${box} ${LAMP_STYLES[tone]}`}
+    >
+      {children}
+    </span>
+  );
 }
 
-const TASK_TONE: Record<
-  TaskStatus,
-  { tone: "red" | "amber" | "neutral"; label: string }
+/** Lamp plus its label — the label stays for screen readers and scanning. */
+function LampWithLabel({
+  tone,
+  label,
+  size,
+  icon,
+}: {
+  tone: Lamp;
+  label: string;
+  size?: "sm" | "lg";
+  icon: React.ReactNode;
+}) {
+  const text =
+    tone === "red"
+      ? "text-red-300"
+      : tone === "amber"
+        ? "text-amber-300"
+        : tone === "green"
+          ? "text-emerald-300"
+          : "text-[var(--subtle)]";
+  return (
+    <span className="inline-flex items-center gap-2">
+      <StatusLamp tone={tone} size={size}>
+        {icon}
+      </StatusLamp>
+      <span className={`text-xs font-medium ${text}`}>{label}</span>
+    </span>
+  );
+}
+
+const FORECAST_LAMP: Record<
+  ForecastStatus,
+  { tone: Lamp; label: string; icon: React.ReactNode }
 > = {
-  OVERDUE: { tone: "red", label: "Overdue" },
-  DUE_SOON: { tone: "amber", label: "Due soon" },
-  UPCOMING: { tone: "neutral", label: "Upcoming" },
+  OVERDUE: {
+    tone: "red",
+    label: "Past expected life",
+    icon: <IconAlert className="h-3.5 w-3.5" />,
+  },
+  DUE_SOON: {
+    tone: "amber",
+    label: "Replacement window",
+    icon: <IconAlert className="h-3.5 w-3.5" />,
+  },
+  WATCH: {
+    tone: "amber",
+    label: "Within 2 years",
+    icon: <IconClock className="h-3.5 w-3.5" />,
+  },
+  OK: { tone: "green", label: "OK", icon: <IconCheck className="h-3.5 w-3.5" /> },
+};
+
+export function ForecastBadge({
+  status,
+  size,
+}: {
+  status: ForecastStatus;
+  size?: "sm" | "lg";
+}) {
+  const { tone, label, icon } = FORECAST_LAMP[status];
+  return <LampWithLabel tone={tone} label={label} icon={icon} size={size} />;
+}
+
+const TASK_LAMP: Record<
+  TaskStatus,
+  { tone: Lamp; label: string; icon: React.ReactNode }
+> = {
+  OVERDUE: {
+    tone: "red",
+    label: "Overdue",
+    icon: <IconAlert className="h-3.5 w-3.5" />,
+  },
+  DUE_SOON: {
+    tone: "amber",
+    label: "Due soon",
+    icon: <IconClock className="h-3.5 w-3.5" />,
+  },
+  UPCOMING: {
+    tone: "idle",
+    label: "Upcoming",
+    icon: <IconClock className="h-3.5 w-3.5" />,
+  },
 };
 
 export function TaskBadge({
   status,
   active,
+  size,
 }: {
   status: TaskStatus;
   active: boolean;
+  size?: "sm" | "lg";
 }) {
-  if (!active) return <Badge>Paused</Badge>;
-  const { tone, label } = TASK_TONE[status];
-  return <Badge tone={tone}>{label}</Badge>;
+  if (!active) {
+    return (
+      <LampWithLabel
+        tone="idle"
+        label="Paused"
+        size={size}
+        icon={<IconPause className="h-3.5 w-3.5" />}
+      />
+    );
+  }
+  const { tone, label, icon } = TASK_LAMP[status];
+  return <LampWithLabel tone={tone} label={label} icon={icon} size={size} />;
+}
+
+/** Small "live" indicator — a dot that pulses. */
+export function PulseDot() {
+  return (
+    <span className="relative flex h-2 w-2">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+    </span>
+  );
 }
 
 /** Server-action error surfaced back to a form via ?error= */
 export function FormError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-      {message}
+    <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+      <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function Notice({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3.5 py-2.5 text-sm text-[var(--accent-strong)]">
+      <IconCheck className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
     </div>
   );
 }

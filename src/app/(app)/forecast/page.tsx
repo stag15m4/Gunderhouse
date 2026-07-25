@@ -58,7 +58,7 @@ export default async function ForecastPage() {
           />
         )}
         {untracked > 0 ? (
-          <p className="mt-3 text-xs text-stone-500">
+          <p className="mt-3 text-xs text-[var(--subtle)]">
             {untracked} {untracked === 1 ? "item has" : "items have"} no
             in-service date and {untracked === 1 ? "isn't" : "aren't"} forecast.
           </p>
@@ -76,7 +76,8 @@ function ForecastTable({
   homeNames: Map<string, string>;
 }) {
   return (
-    <table className="table">
+    <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
       <thead>
         <tr>
           <th>Item</th>
@@ -94,12 +95,12 @@ function ForecastTable({
           <tr key={item.applianceId}>
             <td>
               <Link
-                className="font-medium text-stone-900 hover:underline"
+                className="font-medium text-[var(--text)] hover:underline"
                 href={`/homes/${item.homeId}/appliances/${item.applianceId}`}
               >
                 {item.name}
               </Link>
-              <div className="text-xs text-stone-500">
+              <div className="text-xs text-[var(--subtle)]">
                 {APPLIANCE_CATEGORY_LABELS[item.category]}
                 {item.location ? ` · ${item.location}` : ""}
               </div>
@@ -119,5 +120,6 @@ function ForecastTable({
         ))}
       </tbody>
     </table>
+          </div>
   );
 }

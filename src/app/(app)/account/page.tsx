@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/access";
 import { changePassword } from "@/app/actions/members";
 import { SYSTEM_ROLE_LABELS } from "@/lib/labels";
-import { Field, FormError, PageHeader, Section } from "@/components/ui";
+import { Field, FormError, Notice, PageHeader, Section } from "@/components/ui";
 
 export default async function AccountPage({
   searchParams,
@@ -17,13 +17,11 @@ export default async function AccountPage({
 
       <FormError message={error} />
       {updated ? (
-        <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Password updated.
-        </div>
+        <Notice>Password updated.</Notice>
       ) : null}
 
       <Section title="Access">
-        <p className="text-sm text-stone-700">
+        <p className="text-sm text-[var(--muted)]">
           {SYSTEM_ROLE_LABELS[user.systemRole]}
         </p>
       </Section>
