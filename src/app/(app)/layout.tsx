@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
 import { requireUser } from "@/lib/access";
+import { Wordmark } from "@/components/Wordmark";
+import { TabBar } from "@/components/TabBar";
+import { IconSignOut } from "@/components/icons";
 
 export default async function AppLayout({
   children,
@@ -9,40 +12,51 @@ export default async function AppLayout({
 }) {
   const user = await requireUser();
 
+  const tabs = [
+    { href: "/homes", label: "Homes", icon: "home" as const },
+    { href: "/forecast", label: "Forecast", icon: "forecast" as const },
+    ...(user.systemRole === "OWNER"
+      ? [{ href: "/household", label: "Household", icon: "household" as const }]
+      : []),
+    { href: "/account", label: "Account", icon: "account" as const },
+  ];
+
   return (
     <div className="min-h-screen">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3">
-          <Link href="/homes" className="text-lg font-semibold text-stone-900">
-            Gunderhouse
-          </Link>
-          <nav className="flex flex-1 flex-wrap gap-4 text-sm text-stone-600">
-            <Link className="hover:text-stone-900" href="/homes">
-              Homes
+      {/*
+        The top-left corner is intentionally empty: on an installed PWA the
+        window controls sit there and would cover anything placed in it. The
+        wordmark is centred and the only control is pinned right.
+      */}
+      <header
+        className="sticky top-0 z-20 border-b border-[var(--border)] bg-[var(--bg)]/85 backdrop-blur"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="mx-auto flex h-14 max-w-3xl items-center px-4">
+          <div className="w-10" aria-hidden="true" />
+          <div className="flex flex-1 justify-center">
+            <Link href="/homes" aria-label="Gunderhouse">
+              <Wordmark />
             </Link>
-            <Link className="hover:text-stone-900" href="/forecast">
-              Forecast
-            </Link>
-            {user.systemRole === "OWNER" ? (
-              <Link className="hover:text-stone-900" href="/household">
-                Household
-              </Link>
-            ) : null}
-          </nav>
-          <div className="flex items-center gap-3 text-sm text-stone-500">
-            <Link className="hover:text-stone-900" href="/account">
-              {user.name || user.email}
-            </Link>
-            <form action={signOutAction}>
-              <button className="hover:text-stone-900" type="submit">
-                Sign out
-              </button>
-            </form>
           </div>
+          <form action={signOutAction} className="flex w-10 justify-end">
+            <button
+              className="text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+              type="submit"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <IconSignOut />
+            </button>
+          </form>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-3xl space-y-4 px-4 pb-28 pt-5">
+        {children}
+      </main>
+
+      <TabBar tabs={tabs} />
     </div>
   );
 }

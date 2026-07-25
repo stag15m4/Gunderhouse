@@ -1,10 +1,8 @@
-import { notFound } from "next/navigation";
-import { acceptInvitation } from "@/app/actions/members";
+import { completePasswordReset } from "@/app/actions/members";
 import { prisma } from "@/lib/prisma";
 import { Field, FormError } from "@/components/ui";
-import { HOME_ROLE_SHORT, SYSTEM_ROLE_LABELS } from "@/lib/labels";
 
-export default async function InvitePage({
+export default async function ResetPasswordPage({
   params,
   searchParams,
 }: {
@@ -14,58 +12,53 @@ export default async function InvitePage({
   const { token } = await params;
   const { error } = await searchParams;
 
-  const invitation = await prisma.invitation.findUnique({
+  const reset = await prisma.passwordReset.findUnique({
     where: { token },
-    include: { home: { select: { name: true } } },
+    include: { user: { select: { name: true, email: true } } },
   });
 
-  if (!invitation) notFound();
-
-  const expired = invitation.expiresAt < new Date();
-  if (invitation.acceptedAt || expired) {
+  // An unknown token gets the same panel as a spent one. Issuing a fresh link
+  // deletes the previous row, so "never existed" and "superseded" are the same
+  // situation to the person holding the link — and it gives nothing away about
+  // which tokens are real.
+  if (!reset || reset.usedAt || reset.expiresAt < new Date()) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
         <div className="card p-6">
           <h1 className="text-lg font-semibold text-[var(--text)]">
-            This invitation is no longer valid
+            This reset link is no longer valid
           </h1>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            {invitation.acceptedAt
-              ? "It has already been used."
-              : "It expired. Ask a household admin to send a new one."}
+            {reset?.usedAt
+              ? "It has already been used. Ask a household admin for a new one."
+              : "It may have expired, or been replaced by a newer link. Ask a household admin for a new one."}
           </p>
         </div>
       </main>
     );
   }
 
-  const accept = acceptInvitation.bind(null, token);
+  const complete = completePasswordReset.bind(null, token);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--text)]">
-          Welcome to Gunderhouse, {invitation.name}
+          Set a new password
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Choose a password for <strong>{invitation.email}</strong>.
+          For <strong>{reset.user.email}</strong>.
         </p>
-        <ul className="mt-3 space-y-1 text-sm text-[var(--subtle)]">
-          <li>{SYSTEM_ROLE_LABELS[invitation.systemRole]}</li>
-          {invitation.home && invitation.homeRole ? (
-            <li>
-              {HOME_ROLE_SHORT[invitation.homeRole]} access to{" "}
-              {invitation.home.name}
-            </li>
-          ) : null}
-        </ul>
+        <p className="mt-2 text-xs text-[var(--subtle)]">
+          Anyone still signed in as {reset.user.name} will be signed out.
+        </p>
       </div>
 
       <FormError message={error} />
 
-      <form action={accept} className="card space-y-4 p-6">
+      <form action={complete} className="card space-y-4 p-6">
         <Field
-          label="Password"
+          label="New password"
           name="password"
           type="password"
           required
@@ -78,7 +71,7 @@ export default async function InvitePage({
           required
         />
         <button className="btn w-full" type="submit">
-          Create account
+          Set password
         </button>
       </form>
     </main>

@@ -51,6 +51,37 @@ Everyone else joins by invitation: **Household → Invite someone** produces a
 `/invite/<token>` link you pass along yourself (there's no mail sending
 configured, on purpose — it keeps the household off an email provider).
 
+## Passwords
+
+There is no default password anywhere. The seeded account uses whatever
+`SEED_OWNER_PASSWORD` you supply, and re-running the seed never overwrites an
+existing password.
+
+- **Someone forgot theirs** — a household admin clicks **Reset password** next
+  to them on the Household page. That produces a single-use `/reset/<token>`
+  link, valid 24 hours, which you hand over the same way as an invitation.
+  Issuing a new link cancels any earlier one for that person.
+- **Changing your own** — **Your account**, with the current password.
+- **Nobody can get in at all** — the one case no in-app button can solve. Run
+  the CLI against the database:
+
+  ```bash
+  RESET_EMAIL=you@example.com RESET_PASSWORD='new-password' \
+    npx tsx prisma/reset-password.ts
+  ```
+
+Any password change — reset link, self-service, or CLI — signs out every
+session that was opened with the old password.
+
+### Sessions
+
+Sessions are JWTs, so their contents are a snapshot from sign-in. Authorization
+never trusts that snapshot: `requireUser()` re-reads the account on every
+request and rejects the session if the account is gone, or if the password
+changed after the token was issued. Removing someone, or demoting them from
+household admin, therefore takes effect on their next click rather than
+whenever their token happens to expire.
+
 ## Deploying to Railway
 
 1. Create a Postgres service; Railway provides `DATABASE_URL`.
@@ -83,6 +114,23 @@ whole file in memory. Raising that meaningfully wants presigned
 direct-to-bucket uploads instead — a contained change to the upload route and
 the document form.
 
+## Routine maintenance
+
+Jobs that repeat live on each home's **Maintenance** tab: a title, how often it
+repeats (every N days/weeks/months/years), when it's next due, and optionally
+the appliance it belongs to. Leave the appliance blank for anything without one
+— gutters, filters in no particular unit, seasonal shutdowns.
+
+Completing a task does two things in one transaction: it **writes an entry into
+that home's maintenance log** and rolls the due date forward. So there's one
+history, not a separate "chores" list that drifts out of sync, and completions
+show up in the home's spend totals like any other work.
+
+Due dates are anchored to the **completion**, not to a fixed calendar. Finish a
+quarterly job three weeks late and the next one lands three months after you
+actually did it — the gap between servicings is what matters. Pausing a task
+keeps its history but stops it coming due.
+
 ## Maintenance forecasting
 
 `src/lib/lifespans.ts` is a plain lookup table of typical service life per
@@ -111,14 +159,31 @@ token is the entire check, so it grants read access to the whole household.
 | `GET /api/alfred/appliances` | Appliances and home systems, with lifespan ranges |
 | `GET /api/alfred/maintenance` | Maintenance entries, with date-range filtering and cost totals |
 | `GET /api/alfred/forecast` | Items flagged against expected service life, most urgent first |
+| `GET /api/alfred/tasks` | Routine tasks and when they're next due |
 
 Most endpoints accept `home=<id or name>` so Alfred can pass through whatever
 the user said. See `docs/alfred-integration.md` for parameters and response
 shapes.
 
-Writes are not part of this contract. If Alfred should ever log maintenance
-("log that we replaced the water heater today"), that belongs behind an
-explicit confirm-first flow added separately — not bolted onto these routes.
+### The one write
+
+`POST /api/alfred/tasks/complete` marks a routine task done, and it always takes
+two round trips:
+
+1. `POST { taskId, ... }` — **changes nothing.** Returns a plain-language summary
+   of what would happen and a `confirmationToken`, valid five minutes.
+2. `POST { confirmationToken }` — applies exactly what the summary described.
+
+The assistant is expected to read the summary back and get an explicit "yes"
+before step 2. That's the whole point of the split: a misheard sentence can't
+record work, because the person hears the interpretation before anything is
+written. Tokens are single-use, so a replayed confirmation writes nothing.
+
+Entries created this way are stamped `loggedVia: ALFRED` and show as
+"Alfred / Lucy" in the task's history, so assistant-driven writes are always
+distinguishable from someone tapping a button.
+
+Nothing else is writable.
 
 ## Layout
 
@@ -126,6 +191,7 @@ explicit confirm-first flow added separately — not bolted onto these routes.
 prisma/schema.prisma          data model
 src/auth.ts                   Auth.js configuration
 src/lib/access.ts             the access model, in one file
+prisma/reset-password.ts      CLI password reset, for a locked-out admin
 src/lib/forecast.ts           age-vs-lifespan classification
 src/lib/lifespans.ts          the lifespan table — edit estimates here
 src/lib/storage.ts            document storage drivers (s3 / local)

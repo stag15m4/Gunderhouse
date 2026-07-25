@@ -2,46 +2,111 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Gunderhouse shares Alfred's visual language: one dark ground, one metallic
+ * gold accent, no theme toggle. Every colour lives here as a custom property
+ * and is referenced through arbitrary values (bg-[var(--surface)]) so the
+ * palette has exactly one home.
+ */
+:root {
+  --bg: #0a0a0b;
+  --surface: rgba(24, 24, 27, 0.5);
+  --surface-solid: #18181b;
+  --sidebar: #18181b;
+  --border: #27272a;
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --subtle: #71717a;
+  --faint: #52525b;
+  --accent: #c9a04c;
+  --accent-strong: #e8c877;
+  --accent-soft: rgba(201, 160, 76, 0.08);
+  --accent-border: rgba(201, 160, 76, 0.25);
+  --grad-1: #f2dd92;
+  --grad-2: #cba24e;
+  --grad-3: #a87c2e;
+  --on-accent: #0a0a0a;
+  --glow: rgba(201, 160, 76, 0.25);
+  --btn: #f4f4f5;
+  --on-btn: #0a0a0a;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    background-color: var(--bg);
+    color-scheme: dark;
   }
+
   body {
-    @apply bg-stone-50 text-stone-900 antialiased;
+    @apply bg-[var(--bg)] text-[var(--text)] antialiased;
+  }
+
+  /* Costs, dates and counts line up in columns. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: var(--accent-border);
+    color: var(--text);
   }
 }
 
 @layer components {
+  /* The uppercase, tracked-out, accent label. Headers only — never body copy. */
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)];
+  }
+
   .label {
-    @apply block text-sm font-medium text-stone-700;
+    @apply block text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--subtle)];
   }
 
   .input {
-    @apply mt-1 block w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm
-           text-stone-900 shadow-sm outline-none placeholder:text-stone-400
-           focus:border-stone-500 focus:ring-1 focus:ring-stone-500;
+    @apply mt-1.5 block w-full rounded-xl border border-[var(--border)] bg-[var(--surface-solid)]
+           px-3 py-2.5 text-sm text-[var(--text)] outline-none transition-colors
+           placeholder:text-[var(--faint)]
+           focus:border-[var(--accent-border)] focus:ring-1 focus:ring-[var(--accent-border)];
+  }
+
+  select.input {
+    @apply appearance-none bg-[var(--surface-solid)];
   }
 
   .btn {
-    @apply inline-flex items-center justify-center rounded-md border border-transparent
-           bg-stone-800 px-3.5 py-2 text-sm font-medium text-white
-           hover:bg-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-500
-           focus:ring-offset-1 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-transparent
+           bg-[var(--btn)] px-4 py-2.5 text-sm font-medium text-[var(--on-btn)]
+           transition-opacity hover:opacity-90 focus:outline-none
+           focus:ring-2 focus:ring-[var(--accent-border)] focus:ring-offset-2
+           focus:ring-offset-[var(--bg)] disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-md border border-stone-300
-           bg-white px-3.5 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50
-           focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-offset-1;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)]
+           bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--muted)]
+           transition-colors hover:border-[var(--accent-border)] hover:text-[var(--text)]
+           focus:outline-none focus:ring-2 focus:ring-[var(--accent-border)];
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-md border border-red-200
-           bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50;
+    @apply inline-flex items-center justify-center rounded-xl border border-red-500/40
+           bg-red-500/10 px-3.5 py-2 text-sm font-medium text-red-300
+           transition-colors hover:bg-red-500/20;
   }
 
   .card {
-    @apply rounded-lg border border-stone-200 bg-white shadow-sm;
+    @apply rounded-2xl border border-[var(--border)] bg-[var(--surface)];
+  }
+
+  .link {
+    @apply text-[var(--muted)] transition-colors hover:text-[var(--text)];
+  }
+
+  .link-accent {
+    @apply text-[var(--accent)] transition-colors hover:text-[var(--accent-strong)];
   }
 
   .table {
@@ -49,11 +114,15 @@
   }
 
   .table th {
-    @apply border-b border-stone-200 px-3 py-2 text-left text-xs font-semibold
-           uppercase tracking-wide text-stone-500;
+    @apply border-b border-[var(--border)] px-3 py-2 text-left text-[11px] font-medium
+           uppercase tracking-[0.14em] text-[var(--subtle)];
   }
 
   .table td {
-    @apply border-b border-stone-100 px-3 py-2.5 align-top text-stone-700;
+    @apply border-b border-[var(--border-soft)] px-3 py-3 align-top text-[var(--muted)];
+  }
+
+  .table tr:last-child td {
+    @apply border-b-0;
   }
 }

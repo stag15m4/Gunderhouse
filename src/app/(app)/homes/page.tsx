@@ -58,7 +58,7 @@ export default async function HomesPage() {
           </Empty>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {homes.map((home) => {
             const flagged = upcomingByHome.get(home.id) ?? 0;
             const address = formatAddress(home);
@@ -66,18 +66,18 @@ export default async function HomesPage() {
               <Link
                 key={home.id}
                 href={`/homes/${home.id}`}
-                className="card block p-4 transition hover:border-stone-300 hover:shadow"
+                className="card block p-4 transition hover:border-[var(--border)] hover:shadow"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <h2 className="font-medium text-stone-900">{home.name}</h2>
-                  <Badge tone={home.type === "RENTAL" ? "blue" : "neutral"}>
+                  <h2 className="font-medium text-[var(--text)]">{home.name}</h2>
+                  <Badge tone={home.type === "RENTAL" ? "accent" : "neutral"}>
                     {HOME_TYPE_LABELS[home.type]}
                   </Badge>
                 </div>
                 {address ? (
-                  <p className="mt-1 text-sm text-stone-500">{address}</p>
+                  <p className="mt-1 text-sm text-[var(--subtle)]">{address}</p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-stone-500">
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[var(--subtle)]">
                   <span>
                     {applianceCount.get(home.id) ?? 0} appliances &amp; systems
                   </span>

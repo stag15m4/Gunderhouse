@@ -64,11 +64,11 @@ export default async function HomeAccessPage({
         title="Household admins"
         description="Full access to every home. Managed on the Household page."
       >
-        <ul className="space-y-1 text-sm text-stone-700">
+        <ul className="space-y-1 text-sm text-[var(--muted)]">
           {owners.map((owner) => (
             <li key={owner.id}>
               {owner.name}{" "}
-              <span className="text-stone-400">{owner.email}</span>{" "}
+              <span className="text-[var(--faint)]">{owner.email}</span>{" "}
               <Badge tone="green">Admin</Badge>
             </li>
           ))}
@@ -81,7 +81,8 @@ export default async function HomeAccessPage({
             Nobody outside the household admins has access to this home yet.
           </Empty>
         ) : (
-          <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table min-w-[36rem]">
             <thead>
               <tr>
                 <th>Person</th>
@@ -94,7 +95,7 @@ export default async function HomeAccessPage({
                 <tr key={membership.id}>
                   <td>
                     {membership.user.name}
-                    <div className="text-xs text-stone-500">
+                    <div className="text-xs text-[var(--subtle)]">
                       {membership.user.email}
                     </div>
                   </td>
@@ -127,7 +128,7 @@ export default async function HomeAccessPage({
                       )}
                     >
                       <button
-                        className="text-xs text-red-600 hover:text-red-800"
+                        className="text-xs text-red-400 hover:text-red-300"
                         type="submit"
                       >
                         Remove access
@@ -138,6 +139,7 @@ export default async function HomeAccessPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Section>
 
