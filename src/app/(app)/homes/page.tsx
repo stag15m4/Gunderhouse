@@ -26,7 +26,10 @@ export default async function HomesPage() {
       category: true,
       location: true,
       installedOn: true,
+      modelYear: true,
       warrantyExpiresOn: true,
+      expectedLifeLowYears: true,
+      expectedLifeHighYears: true,
     },
   });
   const upcoming = upcomingOnly(buildForecast(appliances));

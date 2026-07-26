@@ -46,8 +46,17 @@ export async function GET(request: Request) {
         serialNumber: appliance.serialNumber,
         location: appliance.location,
         installedOn: isoDate(appliance.installedOn),
+        // Set when the unit predates its arrival here — i.e. bought used.
+        modelYear: appliance.modelYear,
         warrantyExpiresOn: isoDate(appliance.warrantyExpiresOn),
-        expectedLifespanYears: { low: lifespan.low, high: lifespan.high },
+        expectedLifespanYears: {
+          low: appliance.expectedLifeLowYears ?? lifespan.low,
+          high: appliance.expectedLifeHighYears ?? lifespan.high,
+          // false when it came from the category table, true when set by hand.
+          overridden:
+            appliance.expectedLifeLowYears !== null ||
+            appliance.expectedLifeHighYears !== null,
+        },
         notes: appliance.notes,
       };
     }),

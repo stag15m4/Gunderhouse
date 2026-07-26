@@ -3,16 +3,25 @@ import { lifespanFor } from "./lifespans";
 
 export type ForecastStatus = "OVERDUE" | "DUE_SOON" | "WATCH" | "OK";
 
+/** Which date the age was measured from. */
+export type AgeBasis = "MODEL_YEAR" | "IN_SERVICE";
+
 export type ForecastItem = {
   applianceId: string;
   homeId: string;
   name: string;
   category: ApplianceCategory;
   location: string | null;
-  installedOn: Date;
+  installedOn: Date | null;
+  modelYear: number | null;
+  /** The date the age was actually measured from. */
+  agedFrom: Date;
+  ageBasis: AgeBasis;
   ageYears: number;
   lifespanLow: number;
   lifespanHigh: number;
+  /** True when this unit's expected life was set by hand, not by its category. */
+  lifespanOverridden: boolean;
   /** Year the unit reaches the low end of its expected life. */
   expectedReplacementYear: number;
   yearsRemaining: number;
@@ -27,6 +36,20 @@ function yearsBetween(from: Date, to: Date): number {
   return (to.getTime() - from.getTime()) / MS_PER_YEAR;
 }
 
+type ForecastInput = Pick<
+  Appliance,
+  | "id"
+  | "homeId"
+  | "name"
+  | "category"
+  | "location"
+  | "installedOn"
+  | "modelYear"
+  | "warrantyExpiresOn"
+  | "expectedLifeLowYears"
+  | "expectedLifeHighYears"
+>;
+
 /**
  * Classify one appliance against its expected lifespan.
  *
@@ -35,25 +58,33 @@ function yearsBetween(from: Date, to: Date): number {
  * - WATCH:    within two years of the low end
  * - OK:       everything else
  *
- * Appliances with no in-service date can't be forecast and are skipped.
+ * Age is measured from the unit's model year when one is recorded, and only
+ * otherwise from its in-service date. A second-hand machine is as old as it is,
+ * regardless of when it arrived here — dating it from the install would make
+ * every used purchase look brand new.
+ *
+ * An item with neither a model year nor an in-service date can't be forecast
+ * and is skipped.
  */
 export function forecastAppliance(
-  appliance: Pick<
-    Appliance,
-    | "id"
-    | "homeId"
-    | "name"
-    | "category"
-    | "location"
-    | "installedOn"
-    | "warrantyExpiresOn"
-  >,
+  appliance: ForecastInput,
   now: Date = new Date(),
 ): ForecastItem | null {
-  if (!appliance.installedOn) return null;
+  const agedFrom = appliance.modelYear
+    ? new Date(Date.UTC(appliance.modelYear, 0, 1))
+    : appliance.installedOn;
+  if (!agedFrom) return null;
 
-  const { low, high, replacementCost } = lifespanFor(appliance.category);
-  const ageYears = yearsBetween(appliance.installedOn, now);
+  const ageBasis: AgeBasis = appliance.modelYear ? "MODEL_YEAR" : "IN_SERVICE";
+
+  const table = lifespanFor(appliance.category);
+  const low = appliance.expectedLifeLowYears ?? table.low;
+  const high = appliance.expectedLifeHighYears ?? table.high;
+  const lifespanOverridden =
+    appliance.expectedLifeLowYears !== null ||
+    appliance.expectedLifeHighYears !== null;
+
+  const ageYears = yearsBetween(agedFrom, now);
   const yearsRemaining = low - ageYears;
 
   let status: ForecastStatus;
@@ -62,8 +93,8 @@ export function forecastAppliance(
   else if (yearsRemaining <= 2) status = "WATCH";
   else status = "OK";
 
-  const expectedReplacement = new Date(appliance.installedOn);
-  expectedReplacement.setFullYear(expectedReplacement.getFullYear() + low);
+  const expectedReplacement = new Date(agedFrom);
+  expectedReplacement.setUTCFullYear(expectedReplacement.getUTCFullYear() + low);
 
   return {
     applianceId: appliance.id,
@@ -72,13 +103,17 @@ export function forecastAppliance(
     category: appliance.category,
     location: appliance.location,
     installedOn: appliance.installedOn,
+    modelYear: appliance.modelYear,
+    agedFrom,
+    ageBasis,
     ageYears: Math.round(ageYears * 10) / 10,
     lifespanLow: low,
     lifespanHigh: high,
-    expectedReplacementYear: expectedReplacement.getFullYear(),
+    lifespanOverridden,
+    expectedReplacementYear: expectedReplacement.getUTCFullYear(),
     yearsRemaining: Math.round(yearsRemaining * 10) / 10,
     status,
-    estimatedCost: replacementCost ?? null,
+    estimatedCost: table.replacementCost ?? null,
     warrantyExpiresOn: appliance.warrantyExpiresOn,
   };
 }
@@ -92,7 +127,7 @@ const STATUS_ORDER: Record<ForecastStatus, number> = {
 
 /** Forecast a set of appliances, most urgent first. */
 export function buildForecast(
-  appliances: Parameters<typeof forecastAppliance>[0][],
+  appliances: ForecastInput[],
   now: Date = new Date(),
 ): ForecastItem[] {
   return appliances
@@ -108,4 +143,13 @@ export function buildForecast(
 /** Items worth surfacing on a dashboard — anything not comfortably OK. */
 export function upcomingOnly(items: ForecastItem[]): ForecastItem[] {
   return items.filter((i) => i.status !== "OK");
+}
+
+/** True when the unit predates its arrival here — i.e. it was bought used. */
+export function boughtUsed(appliance: {
+  modelYear: number | null;
+  installedOn: Date | null;
+}): boolean {
+  if (!appliance.modelYear || !appliance.installedOn) return false;
+  return appliance.modelYear < appliance.installedOn.getUTCFullYear();
 }

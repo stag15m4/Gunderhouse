@@ -24,13 +24,15 @@ export default async function ForecastPage() {
     0,
   );
 
-  const untracked = appliances.filter((a) => !a.installedOn).length;
+  const untracked = appliances.filter(
+    (a) => !a.installedOn && !a.modelYear,
+  ).length;
 
   return (
     <>
       <PageHeader
         title="Maintenance forecast"
-        subtitle="Appliance age against typical service life. An estimate for planning, not a prediction."
+        subtitle="Appliance age against expected service life. Used units age from their model year. An estimate for planning, not a prediction."
       />
 
       <Section
@@ -59,8 +61,8 @@ export default async function ForecastPage() {
         )}
         {untracked > 0 ? (
           <p className="mt-3 text-xs text-[var(--subtle)]">
-            {untracked} {untracked === 1 ? "item has" : "items have"} no
-            in-service date and {untracked === 1 ? "isn't" : "aren't"} forecast.
+            {untracked} {untracked === 1 ? "item has" : "items have"} neither a
+            model year nor an in-service date, so {untracked === 1 ? "it isn't" : "they aren't"} forecast.
           </p>
         ) : null}
       </Section>
