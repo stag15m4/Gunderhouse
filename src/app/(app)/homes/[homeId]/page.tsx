@@ -105,9 +105,9 @@ export default async function HomeOverviewPage({
             <thead>
               <tr>
                 <th>Item</th>
+                <th>Status</th>
                 <th>In service</th>
                 <th>Expected life</th>
-                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -125,6 +125,9 @@ export default async function HomeOverviewPage({
                     </div>
                   </td>
                   <td>
+                    <ForecastBadge status={item.status} />
+                  </td>
+                  <td>
                     {formatDate(item.installedOn)}
                     <div className="text-xs text-[var(--subtle)]">
                       {item.ageYears} yrs old
@@ -132,9 +135,6 @@ export default async function HomeOverviewPage({
                   </td>
                   <td>
                     {item.lifespanLow}–{item.lifespanHigh} yrs
-                  </td>
-                  <td>
-                    <ForecastBadge status={item.status} />
                   </td>
                 </tr>
               ))}

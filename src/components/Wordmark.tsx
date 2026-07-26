@@ -1,25 +1,40 @@
 /**
- * Gradient-text wordmark — the same technique Lucy uses, so no logo art is
- * needed. The left padding compensates for the trailing letter-space that
- * tracking adds after the final character, keeping the word optically centred.
+ * The Gunderhouse mark, cut from the supplied logo sheet.
+ *
+ * Both files are transparent PNGs — the artwork's glow is preserved as alpha
+ * rather than baked onto a plate, so they sit on the app's ground with no
+ * visible box behind them.
+ *
+ *   "lockup"  mark plus the wordmark, for sign-in and other full-page moments
+ *   "mark"    the mark alone, for the top bar where the wordmark would be
+ *             too small to read
  */
 export function Wordmark({
-  size = "sm",
+  variant = "mark",
   className = "",
 }: {
-  size?: "sm" | "lg";
+  variant?: "lockup" | "mark";
   className?: string;
 }) {
-  const scale =
-    size === "lg"
-      ? "text-3xl tracking-[0.3em] pl-[0.3em]"
-      : "text-lg tracking-[0.3em] pl-[0.3em]";
+  if (variant === "lockup") {
+    return (
+      <img
+        src="/brand/lockup.webp"
+        alt="Gunderhouse"
+        width={700}
+        height={631}
+        className={`h-auto w-full max-w-[19rem] ${className}`}
+      />
+    );
+  }
 
   return (
-    <span
-      className={`font-sans font-medium uppercase text-transparent bg-clip-text bg-gradient-to-b from-[var(--grad-1)] via-[var(--grad-2)] to-[var(--grad-3)] ${scale} ${className}`}
-    >
-      Gunderhouse
-    </span>
+    <img
+      src="/brand/mark.webp"
+      alt="Gunderhouse"
+      width={220}
+      height={205}
+      className={`h-9 w-auto ${className}`}
+    />
   );
 }

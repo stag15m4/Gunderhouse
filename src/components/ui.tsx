@@ -277,7 +277,7 @@ export function StatusLamp({
   size?: "sm" | "lg";
   children: React.ReactNode;
 }) {
-  const box = size === "lg" ? "h-11 w-11" : "h-7 w-7";
+  const box = size === "lg" ? "h-11 w-11" : "h-8 w-8";
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-full border ${box} ${LAMP_STYLES[tone]}`}
@@ -291,13 +291,13 @@ export function StatusLamp({
 function LampWithLabel({
   tone,
   label,
-  size,
-  icon,
+  size = "sm",
+  Icon,
 }: {
   tone: Lamp;
   label: string;
   size?: "sm" | "lg";
-  icon: React.ReactNode;
+  Icon: (props: { className?: string }) => React.ReactElement;
 }) {
   const text =
     tone === "red"
@@ -310,7 +310,7 @@ function LampWithLabel({
   return (
     <span className="inline-flex items-center gap-2">
       <StatusLamp tone={tone} size={size}>
-        {icon}
+        <Icon className={size === "lg" ? "h-5 w-5" : "h-4 w-4"} />
       </StatusLamp>
       <span className={`text-xs font-medium ${text}`}>{label}</span>
     </span>
@@ -319,24 +319,12 @@ function LampWithLabel({
 
 const FORECAST_LAMP: Record<
   ForecastStatus,
-  { tone: Lamp; label: string; icon: React.ReactNode }
+  { tone: Lamp; label: string; Icon: (p: { className?: string }) => React.ReactElement }
 > = {
-  OVERDUE: {
-    tone: "red",
-    label: "Past expected life",
-    icon: <IconAlert className="h-3.5 w-3.5" />,
-  },
-  DUE_SOON: {
-    tone: "amber",
-    label: "Replacement window",
-    icon: <IconAlert className="h-3.5 w-3.5" />,
-  },
-  WATCH: {
-    tone: "amber",
-    label: "Within 2 years",
-    icon: <IconClock className="h-3.5 w-3.5" />,
-  },
-  OK: { tone: "green", label: "OK", icon: <IconCheck className="h-3.5 w-3.5" /> },
+  OVERDUE: { tone: "red", label: "Past expected life", Icon: IconAlert },
+  DUE_SOON: { tone: "amber", label: "Replacement window", Icon: IconAlert },
+  WATCH: { tone: "amber", label: "Within 2 years", Icon: IconClock },
+  OK: { tone: "green", label: "OK", Icon: IconCheck },
 };
 
 export function ForecastBadge({
@@ -346,29 +334,17 @@ export function ForecastBadge({
   status: ForecastStatus;
   size?: "sm" | "lg";
 }) {
-  const { tone, label, icon } = FORECAST_LAMP[status];
-  return <LampWithLabel tone={tone} label={label} icon={icon} size={size} />;
+  const { tone, label, Icon } = FORECAST_LAMP[status];
+  return <LampWithLabel tone={tone} label={label} Icon={Icon} size={size} />;
 }
 
 const TASK_LAMP: Record<
   TaskStatus,
-  { tone: Lamp; label: string; icon: React.ReactNode }
+  { tone: Lamp; label: string; Icon: (p: { className?: string }) => React.ReactElement }
 > = {
-  OVERDUE: {
-    tone: "red",
-    label: "Overdue",
-    icon: <IconAlert className="h-3.5 w-3.5" />,
-  },
-  DUE_SOON: {
-    tone: "amber",
-    label: "Due soon",
-    icon: <IconClock className="h-3.5 w-3.5" />,
-  },
-  UPCOMING: {
-    tone: "idle",
-    label: "Upcoming",
-    icon: <IconClock className="h-3.5 w-3.5" />,
-  },
+  OVERDUE: { tone: "red", label: "Overdue", Icon: IconAlert },
+  DUE_SOON: { tone: "amber", label: "Due soon", Icon: IconClock },
+  UPCOMING: { tone: "idle", label: "Upcoming", Icon: IconClock },
 };
 
 export function TaskBadge({
@@ -381,17 +357,10 @@ export function TaskBadge({
   size?: "sm" | "lg";
 }) {
   if (!active) {
-    return (
-      <LampWithLabel
-        tone="idle"
-        label="Paused"
-        size={size}
-        icon={<IconPause className="h-3.5 w-3.5" />}
-      />
-    );
+    return <LampWithLabel tone="idle" label="Paused" size={size} Icon={IconPause} />;
   }
-  const { tone, label, icon } = TASK_LAMP[status];
-  return <LampWithLabel tone={tone} label={label} icon={icon} size={size} />;
+  const { tone, label, Icon } = TASK_LAMP[status];
+  return <LampWithLabel tone={tone} label={label} Icon={Icon} size={size} />;
 }
 
 /** Small "live" indicator — a dot that pulses. */
@@ -409,7 +378,7 @@ export function FormError({ message }: { message?: string }) {
   if (!message) return null;
   return (
     <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
-      <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <IconAlert className="mt-0.5 h-5 w-5 shrink-0" />
       <span>{message}</span>
     </div>
   );
@@ -418,7 +387,7 @@ export function FormError({ message }: { message?: string }) {
 export function Notice({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-4 flex items-start gap-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] px-3.5 py-2.5 text-sm text-[var(--accent-strong)]">
-      <IconCheck className="mt-0.5 h-4 w-4 shrink-0" />
+      <IconCheck className="mt-0.5 h-5 w-5 shrink-0" />
       <span>{children}</span>
     </div>
   );

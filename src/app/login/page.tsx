@@ -30,9 +30,9 @@ export default async function LoginPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-      <div className="mb-8 text-center">
-        <Wordmark size="lg" />
-        <p className="mt-3 text-sm text-[var(--subtle)]">
+      <div className="mb-8 flex flex-col items-center text-center">
+        <Wordmark variant="lockup" />
+        <p className="mt-4 text-sm text-[var(--subtle)]">
           Homes, appliances, maintenance, and documents.
         </p>
       </div>

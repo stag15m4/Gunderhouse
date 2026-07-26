@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { acceptInvitation } from "@/app/actions/members";
 import { prisma } from "@/lib/prisma";
 import { Field, FormError } from "@/components/ui";
+import { Wordmark } from "@/components/Wordmark";
 import { HOME_ROLE_SHORT, SYSTEM_ROLE_LABELS } from "@/lib/labels";
 
 export default async function InvitePage({
@@ -43,9 +44,10 @@ export default async function InvitePage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-12">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--text)]">
-          Welcome to Gunderhouse, {invitation.name}
+      <div className="mb-6 flex flex-col items-center text-center">
+        <Wordmark variant="lockup" className="max-w-[15rem]" />
+        <h1 className="mt-4 text-xl font-medium text-[var(--text)]">
+          Welcome, {invitation.name}
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Choose a password for <strong>{invitation.email}</strong>.

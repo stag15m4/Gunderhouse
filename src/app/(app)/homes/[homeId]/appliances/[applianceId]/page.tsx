@@ -89,7 +89,7 @@ export default async function ApplianceDetailPage({
       <Section title="Forecast">
         {forecast ? (
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--muted)]">
-            <ForecastBadge status={forecast.status} />
+            <ForecastBadge status={forecast.status} size="lg" />
             <span>{forecast.ageYears} years in service</span>
             <span>
               Typical life {forecast.lifespanLow}–{forecast.lifespanHigh} years
