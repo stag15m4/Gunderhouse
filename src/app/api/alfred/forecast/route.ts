@@ -33,12 +33,16 @@ export async function GET(request: Request) {
     home: home ?? null,
     generatedAt: new Date().toISOString(),
     basis:
-      "Age since in-service date compared to a typical service-life range per category.",
+      "Age compared to an expected service-life range. Age runs from the unit's " +
+      "model year when one is recorded (a second-hand machine is as old as it " +
+      "is), otherwise from its in-service date. The range is the category " +
+      "default unless overridden for that unit.",
     totals: {
       items: items.length,
       estimatedReplacementCostUsd: estimatedTotal,
-      applianceCountWithoutInstallDate: appliances.filter((a) => !a.installedOn)
-        .length,
+      applianceCountNotForecast: appliances.filter(
+        (a) => !a.installedOn && !a.modelYear,
+      ).length,
     },
     items: items.map((item) => ({
       applianceId: item.applianceId,
@@ -48,8 +52,17 @@ export async function GET(request: Request) {
       category: item.category,
       location: item.location,
       installedOn: isoDate(item.installedOn),
+      modelYear: item.modelYear,
+      // MODEL_YEAR for a used unit, IN_SERVICE otherwise — so a caller can say
+      // why something reads older than the date it was installed.
+      ageBasis: item.ageBasis,
+      agedFrom: isoDate(item.agedFrom),
       ageYears: item.ageYears,
-      expectedLifespanYears: { low: item.lifespanLow, high: item.lifespanHigh },
+      expectedLifespanYears: {
+        low: item.lifespanLow,
+        high: item.lifespanHigh,
+        overridden: item.lifespanOverridden,
+      },
       replacementWindowOpensYear: item.expectedReplacementYear,
       yearsRemaining: item.yearsRemaining,
       status: item.status,

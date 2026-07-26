@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import {
   enumValue,
   optionalDate,
+  optionalInt,
   optionalStr,
   requireText,
 } from "@/lib/forms";
@@ -27,7 +28,10 @@ function applianceFieldsFrom(form: FormData) {
     serialNumber: optionalStr(form, "serialNumber"),
     location: optionalStr(form, "location"),
     installedOn: optionalDate(form, "installedOn"),
+    modelYear: optionalInt(form, "modelYear"),
     warrantyExpiresOn: optionalDate(form, "warrantyExpiresOn"),
+    expectedLifeLowYears: optionalInt(form, "expectedLifeLowYears"),
+    expectedLifeHighYears: optionalInt(form, "expectedLifeHighYears"),
     notes: optionalStr(form, "notes"),
   };
 }

@@ -80,7 +80,7 @@ export default async function AppliancesPage({
                         <ForecastBadge status={forecast.status} />
                       ) : (
                         <span className="text-xs text-[var(--faint)]">
-                          No in-service date
+                          No date set
                         </span>
                       )}
                     </td>

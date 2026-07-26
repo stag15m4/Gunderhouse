@@ -1,6 +1,6 @@
 # Gunderhouse — `/api/alfred/*` integration contract
 
-Complete external-caller reference. Accurate as of commit `376d7ce`.
+Complete external-caller reference. Accurate as of commit `c44ae11`.
 
 Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
 replacement forecasting, and routine tasks, plus exactly one write: completing a
@@ -161,8 +161,9 @@ Appliances and whole-home systems.
       "serialNumber": "SN-0099123",
       "location": "Utility closet",
       "installedOn": "2008-04-15",
+      "modelYear": null,
       "warrantyExpiresOn": "2014-04-15",
-      "expectedLifespanYears": { "low": 10, "high": 12 },
+      "expectedLifespanYears": { "low": 10, "high": 12, "overridden": false },
       "notes": null
     }
   ]
@@ -170,6 +171,11 @@ Appliances and whole-home systems.
 ```
 
 Sorted by `installedOn` descending, then `name`.
+
+- `modelYear` is the unit's actual vintage, recorded when it differs from
+  `installedOn` — i.e. the appliance was bought second-hand. `null` otherwise.
+- `expectedLifespanYears.overridden` is `true` when that range was set by hand
+  for this unit rather than taken from the category table.
 
 ---
 
@@ -265,11 +271,11 @@ Appliances measured against typical service life.
 {
   "home": null,
   "generatedAt": "2026-07-25T20:15:00.000Z",
-  "basis": "Age since in-service date compared to a typical service-life range per category.",
+  "basis": "Age compared to an expected service-life range. Age runs from the unit's model year when one is recorded (a second-hand machine is as old as it is), otherwise from its in-service date. The range is the category default unless overridden for that unit.",
   "totals": {
     "items": 2,
     "estimatedReplacementCostUsd": 17000,
-    "applianceCountWithoutInstallDate": 1
+    "applianceCountNotForecast": 1
   },
   "items": [
     {
@@ -280,8 +286,11 @@ Appliances measured against typical service life.
       "category": "WATER_HEATER",
       "location": "Utility closet",
       "installedOn": "2008-04-15",
+      "modelYear": null,
+      "ageBasis": "IN_SERVICE",
+      "agedFrom": "2008-04-15",
       "ageYears": 18.3,
-      "expectedLifespanYears": { "low": 10, "high": 12 },
+      "expectedLifespanYears": { "low": 10, "high": 12, "overridden": false },
       "replacementWindowOpensYear": 2018,
       "yearsRemaining": -8.3,
       "status": "OVERDUE",
@@ -297,9 +306,17 @@ Notes:
 - Sorted most urgent first.
 - By default only non-`OK` items are returned, so "what's coming due?" needs no
   client-side filtering.
-- Appliances with **no `installedOn` cannot be forecast** and are excluded
-  entirely. `totals.applianceCountWithoutInstallDate` reports how many — worth
-  surfacing, since an empty forecast may just mean missing install dates.
+- `ageBasis` is `MODEL_YEAR` when the unit's own vintage was used, `IN_SERVICE`
+  otherwise, and `agedFrom` is the date the age was actually measured from.
+  Together they explain why something can read far older than the date it was
+  installed: a used appliance is as old as it is.
+- Appliances with **neither a model year nor an in-service date cannot be
+  forecast** and are excluded entirely. `totals.applianceCountNotForecast`
+  reports how many — worth surfacing, since an empty forecast may just mean
+  missing dates.
+- `expectedLifespanYears.overridden` is `true` when that unit's range was set by
+  hand. Commercial-grade equipment routinely outlasts its category, so an
+  override is the difference between a useful forecast and a false alarm.
 - `estimatedReplacementCostUsd` comes from a rough per-category table. It is a
   planning hint, not a quote, and may be `null`.
 
@@ -468,6 +485,8 @@ one transaction.
 **`status`** (forecast item) — `OVERDUE` (past the high end of expected life),
 `DUE_SOON` (at or past the low end), `WATCH` (within 2 years of the low end),
 `OK`
+
+**`ageBasis`** (forecast item) — `MODEL_YEAR`, `IN_SERVICE`
 
 **`status`** (routine task) — `OVERDUE`, `DUE_SOON` (within 14 days), `UPCOMING`
 

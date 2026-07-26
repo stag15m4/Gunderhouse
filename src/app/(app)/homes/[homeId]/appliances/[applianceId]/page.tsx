@@ -75,6 +75,10 @@ export default async function ApplianceDetailPage({
           <Detail label="Location" value={appliance.location} />
           <Detail label="In service since" value={formatDate(appliance.installedOn)} />
           <Detail
+            label="Model year"
+            value={appliance.modelYear ? String(appliance.modelYear) : null}
+          />
+          <Detail
             label="Warranty expires"
             value={formatDate(appliance.warrantyExpiresOn)}
           />
@@ -90,9 +94,16 @@ export default async function ApplianceDetailPage({
         {forecast ? (
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[var(--muted)]">
             <ForecastBadge status={forecast.status} size="lg" />
-            <span>{forecast.ageYears} years in service</span>
             <span>
-              Typical life {forecast.lifespanLow}–{forecast.lifespanHigh} years
+              {forecast.ageYears} years old
+              {forecast.ageBasis === "MODEL_YEAR"
+                ? ` (from its ${forecast.modelYear} model year)`
+                : " (from its in-service date)"}
+            </span>
+            <span>
+              {forecast.lifespanOverridden ? "Expected life" : "Typical life"}{" "}
+              {forecast.lifespanLow}–{forecast.lifespanHigh} years
+              {forecast.lifespanOverridden ? " (set for this unit)" : ""}
             </span>
             <span>
               Replacement window starts {forecast.expectedReplacementYear}
@@ -105,7 +116,8 @@ export default async function ApplianceDetailPage({
           </div>
         ) : (
           <Empty>
-            Add an in-service date to include this item in the forecast.
+            Add a model year, or an in-service date, to include this item in the
+            forecast.
           </Empty>
         )}
       </Section>

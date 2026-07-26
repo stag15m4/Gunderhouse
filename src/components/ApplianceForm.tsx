@@ -51,13 +51,21 @@ export function ApplianceForm({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field
           label="In service since"
           name="installedOn"
           type="date"
           defaultValue={dateInputValue(appliance?.installedOn)}
-          hint="Install date. Without it, this item is left out of the forecast."
+          hint="When it went into service here."
+        />
+        <Field
+          label="Model year"
+          name="modelYear"
+          type="number"
+          defaultValue={appliance?.modelYear}
+          placeholder="e.g. 2015"
+          hint="Set this for anything bought used — the forecast ages from it."
         />
         <Field
           label="Warranty expires"
@@ -65,6 +73,33 @@ export function ApplianceForm({
           type="date"
           defaultValue={dateInputValue(appliance?.warrantyExpiresOn)}
         />
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] p-4">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--subtle)]">
+          Expected service life
+        </p>
+        <p className="mt-1.5 text-xs text-[var(--faint)]">
+          Leave blank to use the typical range for the category. Override it for
+          a unit that outlasts its class — commercial-grade laundry, say — or one
+          you expect to fail early.
+        </p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <Field
+            label="From (years)"
+            name="expectedLifeLowYears"
+            type="number"
+            defaultValue={appliance?.expectedLifeLowYears}
+            placeholder="category default"
+          />
+          <Field
+            label="To (years)"
+            name="expectedLifeHighYears"
+            type="number"
+            defaultValue={appliance?.expectedLifeHighYears}
+            placeholder="category default"
+          />
+        </div>
       </div>
 
       <TextareaField label="Notes" name="notes" defaultValue={appliance?.notes} />
