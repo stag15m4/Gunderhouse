@@ -81,13 +81,13 @@ function ForecastTable({
       <thead>
         <tr>
           <th>Item</th>
+          <th>Status</th>
           <th>Home</th>
           <th>In service</th>
           <th>Age</th>
           <th>Typical life</th>
           <th>Window opens</th>
           <th>Est. cost</th>
-          <th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -105,6 +105,9 @@ function ForecastTable({
                 {item.location ? ` · ${item.location}` : ""}
               </div>
             </td>
+            <td>
+              <ForecastBadge status={item.status} />
+            </td>
             <td className="text-xs">{homeNames.get(item.homeId) ?? "—"}</td>
             <td className="whitespace-nowrap">{formatDate(item.installedOn)}</td>
             <td>{item.ageYears} yrs</td>
@@ -113,9 +116,6 @@ function ForecastTable({
             </td>
             <td>{item.expectedReplacementYear}</td>
             <td>{formatDollars(item.estimatedCost)}</td>
-            <td>
-              <ForecastBadge status={item.status} />
-            </td>
           </tr>
         ))}
       </tbody>

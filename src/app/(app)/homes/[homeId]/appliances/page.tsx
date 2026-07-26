@@ -47,11 +47,11 @@ export default async function AppliancesPage({
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Forecast</th>
                 <th>Category</th>
                 <th>Location</th>
                 <th>In service</th>
                 <th>Warranty</th>
-                <th>Forecast</th>
               </tr>
             </thead>
             <tbody>
@@ -75,14 +75,6 @@ export default async function AppliancesPage({
                         </div>
                       ) : null}
                     </td>
-                    <td>{APPLIANCE_CATEGORY_LABELS[appliance.category]}</td>
-                    <td>{appliance.location ?? "—"}</td>
-                    <td className="whitespace-nowrap">
-                      {formatDate(appliance.installedOn)}
-                    </td>
-                    <td className="whitespace-nowrap">
-                      {formatDate(appliance.warrantyExpiresOn)}
-                    </td>
                     <td>
                       {forecast ? (
                         <ForecastBadge status={forecast.status} />
@@ -91,6 +83,14 @@ export default async function AppliancesPage({
                           No in-service date
                         </span>
                       )}
+                    </td>
+                    <td>{APPLIANCE_CATEGORY_LABELS[appliance.category]}</td>
+                    <td>{appliance.location ?? "—"}</td>
+                    <td className="whitespace-nowrap">
+                      {formatDate(appliance.installedOn)}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {formatDate(appliance.warrantyExpiresOn)}
                     </td>
                   </tr>
                 );
