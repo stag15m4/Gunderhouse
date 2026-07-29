@@ -35,10 +35,15 @@ export async function GET(request: Request) {
     (sum, item) => sum + (item.estimatedCost ?? 0),
     0,
   );
+  // Unpriced projects are excluded from the total rather than counted as zero,
+  // and reported separately so a caller can say the total is incomplete.
   const projectTotal = projectRows.reduce(
-    (sum, p) => sum + p.estimatedCostCents / 100,
+    (sum, p) => sum + (p.estimatedCostCents ?? 0) / 100,
     0,
   );
+  const unpricedProjects = projectRows.filter(
+    (p) => p.estimatedCostCents === null,
+  ).length;
 
   return NextResponse.json({
     home: home ?? null,
@@ -53,6 +58,8 @@ export async function GET(request: Request) {
       estimatedReplacementCostUsd: estimatedTotal,
       plannedProjects: projectRows.length,
       plannedProjectCostUsd: projectTotal,
+      // How many of those carry no estimate yet, so the cost above understates.
+      unpricedProjects,
       // Replacements and projects together — the number to answer "what is
       // this house going to cost us?"
       combinedEstimatedCostUsd: Math.round((estimatedTotal + projectTotal) * 100) / 100,
@@ -93,7 +100,9 @@ export async function GET(request: Request) {
       homeId: p.homeId,
       homeName: p.home.name,
       title: p.title,
-      estimatedCostUsd: p.estimatedCostCents / 100,
+      // null when it hasn't been priced yet — not zero.
+      estimatedCostUsd:
+        p.estimatedCostCents !== null ? p.estimatedCostCents / 100 : null,
       targetOn: isoDate(p.targetOn),
       notes: p.notes,
     })),

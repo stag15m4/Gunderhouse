@@ -1,7 +1,11 @@
 import Link from "next/link";
-import { canAdminister, requireHome } from "@/lib/access";
+import { ProjectStatus } from "@prisma/client";
+import { canAdminister, canEdit, requireHome } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { buildForecast, upcomingOnly } from "@/lib/forecast";
+import { sortProjects } from "@/lib/projects";
+import { createProject } from "@/app/actions/projects";
+import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatAddress, formatDate, formatMoney } from "@/lib/format";
 import {
   APPLIANCE_CATEGORY_LABELS,
@@ -24,7 +28,8 @@ export default async function HomeOverviewPage({
   const { homeId } = await params;
   const { home, role } = await requireHome(homeId);
 
-  const [appliances, recentMaintenance, spend, documentCount] = await Promise.all([
+  const [appliances, recentMaintenance, spend, documentCount, projectRows] =
+    await Promise.all([
     prisma.appliance.findMany({
       where: { homeId },
       select: {
@@ -54,9 +59,14 @@ export default async function HomeOverviewPage({
       _sum: { costCents: true },
     }),
     prisma.document.count({ where: { homeId } }),
+    prisma.project.findMany({
+      where: { homeId, status: ProjectStatus.PLANNED },
+    }),
   ]);
 
   const upcoming = upcomingOnly(buildForecast(appliances)).slice(0, 5);
+  const projects = sortProjects(projectRows);
+  const editable = canEdit(role);
   const address = formatAddress(home);
 
   return (
@@ -145,6 +155,23 @@ export default async function HomeOverviewPage({
           </table>
           </div>
         )}
+      </Section>
+
+      <Section
+        title="Projects"
+        description="Work planned for this house, and what it's expected to cost."
+      >
+        <ProjectList
+          projects={projects}
+          editableHomeIds={editable ? new Set([homeId]) : new Set()}
+          returnTo={`/homes/${homeId}`}
+          empty="Nothing on the list for this house yet."
+        />
+        <AddProjectForm
+          action={createProject}
+          homes={editable ? [{ id: homeId, name: home.name }] : []}
+          returnTo={`/homes/${homeId}`}
+        />
       </Section>
 
       <Section

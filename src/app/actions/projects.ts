@@ -14,12 +14,22 @@ import {
 } from "@/lib/forms";
 import { isRedirectError, withError } from "@/lib/action-utils";
 
+/**
+ * Where to go once the write lands. Projects are reachable from the forecast
+ * and from a home's page, and you should end up back where you started.
+ * Anything that isn't a plain in-app path falls back to the forecast, so this
+ * can't be turned into an open redirect.
+ */
+function returnTo(form: FormData): string {
+  const raw = str(form, "returnTo");
+  return /^\/[A-Za-z0-9/_-]*$/.test(raw) ? raw : "/forecast";
+}
+
 function projectFieldsFrom(form: FormData) {
+  // The cost is optional so something can be written down before it's priced.
+  // Unpriced projects show in the list and stay out of the forecast totals.
   const estimatedCostCents = optionalMoneyCents(form, "estimatedCost");
-  if (estimatedCostCents === null) {
-    throw new Error("An estimated cost is required — that's the point of it.");
-  }
-  if (estimatedCostCents < 0) {
+  if (estimatedCostCents !== null && estimatedCostCents < 0) {
     throw new Error("Estimated cost can't be negative.");
   }
 
@@ -36,6 +46,7 @@ function projectFieldsFrom(form: FormData) {
  * is picked in the form rather than taken from the URL.
  */
 export async function createProject(form: FormData) {
+  const back = returnTo(form);
   try {
     const homeId = requireText(form, "homeId", "Home");
     const { user } = await requireHome(homeId, HomeRole.MEMBER);
@@ -44,11 +55,12 @@ export async function createProject(form: FormData) {
     });
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    redirect(withError("/forecast", error));
+    redirect(withError(back, error));
   }
 
   revalidatePath("/forecast");
-  redirect("/forecast");
+  revalidatePath(back);
+  redirect(back);
 }
 
 async function projectForWrite(projectId: string, minimum: HomeRole) {
@@ -62,6 +74,7 @@ async function projectForWrite(projectId: string, minimum: HomeRole) {
 }
 
 export async function updateProject(projectId: string, form: FormData) {
+  const back = returnTo(form);
   try {
     await projectForWrite(projectId, HomeRole.MEMBER);
     await prisma.project.update({
@@ -74,7 +87,8 @@ export async function updateProject(projectId: string, form: FormData) {
   }
 
   revalidatePath("/forecast");
-  redirect("/forecast");
+  revalidatePath(back);
+  redirect(back);
 }
 
 /**
@@ -83,6 +97,7 @@ export async function updateProject(projectId: string, form: FormData) {
  * afterwards how close the forecast was.
  */
 export async function completeProject(projectId: string, form: FormData) {
+  const back = returnTo(form);
   try {
     await projectForWrite(projectId, HomeRole.MEMBER);
     const raw = str(form, "completedOn");
@@ -100,14 +115,16 @@ export async function completeProject(projectId: string, form: FormData) {
     });
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    redirect(withError("/forecast", error));
+    redirect(withError(back, error));
   }
 
   revalidatePath("/forecast");
-  redirect("/forecast");
+  revalidatePath(back);
+  redirect(back);
 }
 
-export async function reopenProject(projectId: string) {
+export async function reopenProject(projectId: string, form: FormData) {
+  const back = returnTo(form);
   try {
     await projectForWrite(projectId, HomeRole.MEMBER);
     await prisma.project.update({
@@ -120,22 +137,25 @@ export async function reopenProject(projectId: string) {
     });
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    redirect(withError("/forecast", error));
+    redirect(withError(back, error));
   }
 
   revalidatePath("/forecast");
-  redirect("/forecast");
+  revalidatePath(back);
+  redirect(back);
 }
 
-export async function deleteProject(projectId: string) {
+export async function deleteProject(projectId: string, form: FormData) {
+  const back = returnTo(form);
   try {
     await projectForWrite(projectId, HomeRole.ADMIN);
     await prisma.project.delete({ where: { id: projectId } });
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    redirect(withError("/forecast", error));
+    redirect(withError(back, error));
   }
 
   revalidatePath("/forecast");
-  redirect("/forecast");
+  revalidatePath(back);
+  redirect(back);
 }

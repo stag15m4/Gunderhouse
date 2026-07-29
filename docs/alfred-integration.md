@@ -276,8 +276,9 @@ Appliances measured against typical service life.
     "items": 2,
     "estimatedReplacementCostUsd": 17000,
     "applianceCountNotForecast": 1,
-    "plannedProjects": 1,
+    "plannedProjects": 2,
     "plannedProjectCostUsd": 3000,
+    "unpricedProjects": 1,
     "combinedEstimatedCostUsd": 20000
   },
   "items": [
@@ -310,6 +311,15 @@ Appliances measured against typical service life.
       "estimatedCostUsd": 3000,
       "targetOn": "2026-09-01",
       "notes": null
+    },
+    {
+      "id": "cms0stu901",
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "title": "Regrade the side yard",
+      "estimatedCostUsd": null,
+      "targetOn": null,
+      "notes": null
     }
   ]
 }
@@ -332,11 +342,15 @@ Notes:
   hand. Commercial-grade equipment routinely outlasts its category, so an
   override is the difference between a useful forecast and a false alarm.
 - `projects` lists planned work the household intends to do — a floor, a
-  driveway — with the cost it's expected to run to. Unlike `items` these carry
-  no expected-life calculation: the cost and date are whatever was entered.
-  Completed projects are omitted. `totals.combinedEstimatedCostUsd` adds
-  replacements and projects together, which is the number behind "what is this
-  house going to cost us?"
+  driveway — with the cost it's expected to run to. This doubles as the
+  household's to-do list per house. Unlike `items` these carry no expected-life
+  calculation: the cost and date are whatever was entered. Completed projects
+  are omitted. `totals.combinedEstimatedCostUsd` adds replacements and projects
+  together, which is the number behind "what is this house going to cost us?"
+- `estimatedCostUsd` is **`null` when the project hasn't been priced yet**, not
+  `0`. Such projects are excluded from `plannedProjectCostUsd` and counted in
+  `totals.unpricedProjects`, so a non-zero count means the cost totals
+  understate the real figure. Say so rather than quoting the total flat.
 - `estimatedReplacementCostUsd` comes from a rough per-category table. It is a
   planning hint, not a quote, and may be `null`.
 

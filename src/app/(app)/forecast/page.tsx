@@ -3,20 +3,17 @@ import { ProjectStatus } from "@prisma/client";
 import { canEdit, requireUser, visibleHomes } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { buildForecast } from "@/lib/forecast";
-import { PROJECT_TIMING_LABELS, projectTiming, sortProjects } from "@/lib/projects";
+import { sortProjects } from "@/lib/projects";
 import { createProject } from "@/app/actions/projects";
+import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatDate, formatDollars, formatMoney } from "@/lib/format";
 import { APPLIANCE_CATEGORY_LABELS } from "@/lib/labels";
 import {
-  Badge,
   Empty,
-  Field,
   ForecastBadge,
   FormError,
   PageHeader,
-  SelectField,
   Section,
-  TextareaField,
 } from "@/components/ui";
 
 export default async function ForecastPage({
@@ -30,7 +27,9 @@ export default async function ForecastPage({
   const homes = await visibleHomes(user);
   const homeIds = homes.map((h) => h.id);
   const homeNames = new Map(homes.map((h) => [h.id, h.name]));
-  const homeRoles = new Map(homes.map((h) => [h.id, h.role]));
+  const editableHomeIds = new Set(
+    homes.filter((h) => canEdit(h.role)).map((h) => h.id),
+  );
 
   const [appliances, projectRows] = await Promise.all([
     prisma.appliance.findMany({ where: { homeId: { in: homeIds } } }),
@@ -54,7 +53,13 @@ export default async function ForecastPage({
         (b.completedOn?.getTime() ?? 0) - (a.completedOn?.getTime() ?? 0),
     );
 
-  const projectTotal = planned.reduce((s, p) => s + p.estimatedCostCents, 0);
+  // Unpriced projects are real to-do items but can't be forecast, so they're
+  // listed and counted separately rather than silently treated as $0.
+  const projectTotal = planned.reduce(
+    (s, p) => s + (p.estimatedCostCents ?? 0),
+    0,
+  );
+  const unpriced = planned.filter((p) => p.estimatedCostCents === null).length;
   const combined = replacementTotal * 100 + projectTotal;
 
   const untracked = appliances.filter(
@@ -88,7 +93,11 @@ export default async function ForecastPage({
           <Figure
             label="Planned projects"
             value={formatDollars(Math.round(projectTotal / 100))}
-            sub={`${planned.length} planned`}
+            sub={
+              unpriced
+                ? `${planned.length} planned · ${unpriced} not priced`
+                : `${planned.length} planned`
+            }
           />
           <Figure
             label="Combined"
@@ -104,103 +113,18 @@ export default async function ForecastPage({
         title="Planned projects"
         description="Work you intend to do, with what you expect it to cost."
       >
-        {planned.length === 0 ? (
-          <Empty>Nothing planned yet. Add a project below.</Empty>
-        ) : (
-          <ul className="divide-y divide-[var(--border)]">
-            {planned.map((project) => {
-              const timing = projectTiming(project);
-              return (
-                <li
-                  key={project.id}
-                  className="flex items-start gap-3 py-4 first:pt-0 last:pb-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[var(--text)]">
-                      {project.title}
-                    </div>
-                    <div className="mt-0.5 text-xs text-[var(--subtle)]">
-                      {homeNames.get(project.homeId) ?? "—"}
-                      {" · "}
-                      {project.targetOn
-                        ? `target ${formatDate(project.targetOn)}`
-                        : "no target date"}
-                    </div>
-                    <div className="mt-2">
-                      <Badge tone={timing === "OVERDUE" ? "amber" : "neutral"}>
-                        {PROJECT_TIMING_LABELS[timing]}
-                      </Badge>
-                    </div>
-                    {project.notes ? (
-                      <div className="mt-1.5 text-xs text-[var(--subtle)]">
-                        {project.notes}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <div className="text-base font-medium text-[var(--text)]">
-                      {formatMoney(project.estimatedCostCents)}
-                    </div>
-                    <Link
-                      className="text-xs text-[var(--subtle)] transition-colors hover:text-[var(--text)]"
-                      href={`/projects/${project.id}`}
-                    >
-                      {canEdit(homeRoles.get(project.homeId) ?? "VIEWER")
-                        ? "Edit"
-                        : "View"}
-                    </Link>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {writableHomes.length > 0 ? (
-          <details className="mt-4 border-t border-[var(--border-soft)] pt-4">
-            <summary className="cursor-pointer text-sm font-medium text-[var(--muted)]">
-              Add a project
-            </summary>
-            <form action={createProject} className="mt-4 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Project"
-                  name="title"
-                  required
-                  placeholder="New kitchen floor"
-                />
-                <SelectField
-                  label="Home"
-                  name="homeId"
-                  options={writableHomes.map((h) => ({
-                    value: h.id,
-                    label: h.name,
-                  }))}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Estimated cost"
-                  name="estimatedCost"
-                  required
-                  placeholder="3000"
-                  hint="A rough number is fine — it's a forecast."
-                />
-                <Field
-                  label="Target date"
-                  name="targetOn"
-                  type="date"
-                  hint="Optional. Leave blank for someday."
-                />
-              </div>
-              <TextareaField label="Notes" name="notes" rows={2} />
-              <button className="btn" type="submit">
-                Add project
-              </button>
-            </form>
-          </details>
-        ) : null}
+        <ProjectList
+          projects={planned}
+          homeNames={homeNames}
+          editableHomeIds={editableHomeIds}
+          returnTo="/forecast"
+          empty="Nothing planned yet. Add a project below."
+        />
+        <AddProjectForm
+          action={createProject}
+          homes={writableHomes}
+          returnTo="/forecast"
+        />
       </Section>
 
       <Section

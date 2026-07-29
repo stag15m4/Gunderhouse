@@ -328,8 +328,10 @@ model Project {
   title String
   notes String?
 
-  /// What you expect it to cost. Stored in cents, like every other amount.
-  estimatedCostCents Int
+  /// What you expect it to cost, in cents like every other amount. Optional:
+  /// this doubles as the house to-do list, and plenty gets written down before
+  /// it gets priced. Unpriced projects are listed but left out of the totals.
+  estimatedCostCents Int?
   /// Roughly when — optional, since plenty of projects are "eventually".
   targetOn           DateTime?
 

@@ -27,10 +27,10 @@ export default async function ProjectPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; from?: string }>;
 }) {
   const { projectId } = await params;
-  const { error } = await searchParams;
+  const { error, from } = await searchParams;
   const user = await requireUser();
 
   const project = await prisma.project.findUnique({
@@ -43,6 +43,9 @@ export default async function ProjectPage({
   if (!role) notFound();
 
   const editable = canEdit(role);
+  // Where you came from, so every button here lands you back there.
+  const back = from && /^\/[A-Za-z0-9/_-]*$/.test(from) ? from : "/forecast";
+  const backLabel = back === "/forecast" ? "Forecast" : project.home.name;
   const update = updateProject.bind(null, projectId);
   const complete = completeProject.bind(null, projectId);
   const reopen = reopenProject.bind(null, projectId);
@@ -54,8 +57,8 @@ export default async function ProjectPage({
       <PageHeader
         title={project.title}
         subtitle={`${project.home.name} · ${isDone ? "completed" : "planned"}`}
-        backHref="/forecast"
-        backLabel="Forecast"
+        backHref={back}
+        backLabel={backLabel}
       />
 
       <FormError message={error} />
@@ -63,13 +66,18 @@ export default async function ProjectPage({
       {editable ? (
         <Section title="Details">
           <form action={update} className="space-y-4">
+            <input type="hidden" name="returnTo" value={back} />
             <Field label="Project" name="title" required defaultValue={project.title} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="Estimated cost"
                 name="estimatedCost"
-                required
-                defaultValue={(project.estimatedCostCents / 100).toFixed(2)}
+                defaultValue={
+                  project.estimatedCostCents !== null
+                    ? (project.estimatedCostCents / 100).toFixed(2)
+                    : ""
+                }
+                hint="Optional. Leave blank until you've priced it."
               />
               <Field
                 label="Target date"
@@ -123,6 +131,7 @@ export default async function ProjectPage({
           description="Drops it out of the forecast. The estimate is kept, so you can see how close it was."
         >
           <form action={complete} className="space-y-4">
+            <input type="hidden" name="returnTo" value={back} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Completed on" name="completedOn" type="date" />
               <Field
@@ -149,6 +158,7 @@ export default async function ProjectPage({
           </p>
           {editable ? (
             <form action={reopen} className="mt-3">
+              <input type="hidden" name="returnTo" value={back} />
               <button className="btn-secondary" type="submit">
                 Move back to planned
               </button>
@@ -160,6 +170,7 @@ export default async function ProjectPage({
       {canAdminister(role) ? (
         <Section title="Delete" description="Removes the project entirely.">
           <form action={remove}>
+            <input type="hidden" name="returnTo" value={back} />
             <button className="btn-danger" type="submit">
               Delete this project
             </button>
