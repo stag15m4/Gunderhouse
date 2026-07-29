@@ -1,6 +1,6 @@
 # Gunderhouse — `/api/alfred/*` integration contract
 
-Complete external-caller reference. Accurate as of commit `c44ae11`.
+Complete external-caller reference. Accurate as of July 2026, including planned projects on the forecast.
 
 Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
 replacement forecasting, and routine tasks, plus exactly one write: completing a
@@ -275,7 +275,10 @@ Appliances measured against typical service life.
   "totals": {
     "items": 2,
     "estimatedReplacementCostUsd": 17000,
-    "applianceCountNotForecast": 1
+    "applianceCountNotForecast": 1,
+    "plannedProjects": 1,
+    "plannedProjectCostUsd": 3000,
+    "combinedEstimatedCostUsd": 20000
   },
   "items": [
     {
@@ -297,6 +300,17 @@ Appliances measured against typical service life.
       "estimatedReplacementCostUsd": 2000,
       "warrantyExpiresOn": "2014-04-15"
     }
+  ],
+  "projects": [
+    {
+      "id": "cms0pqr678",
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "title": "New kitchen floor",
+      "estimatedCostUsd": 3000,
+      "targetOn": "2026-09-01",
+      "notes": null
+    }
   ]
 }
 ```
@@ -317,6 +331,12 @@ Notes:
 - `expectedLifespanYears.overridden` is `true` when that unit's range was set by
   hand. Commercial-grade equipment routinely outlasts its category, so an
   override is the difference between a useful forecast and a false alarm.
+- `projects` lists planned work the household intends to do — a floor, a
+  driveway — with the cost it's expected to run to. Unlike `items` these carry
+  no expected-life calculation: the cost and date are whatever was entered.
+  Completed projects are omitted. `totals.combinedEstimatedCostUsd` adds
+  replacements and projects together, which is the number behind "what is this
+  house going to cost us?"
 - `estimatedReplacementCostUsd` comes from a rough per-category table. It is a
   planning hint, not a quote, and may be `null`.
 

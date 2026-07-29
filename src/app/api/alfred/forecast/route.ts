@@ -15,10 +15,17 @@ export async function GET(request: Request) {
 
   const includeOk = url.searchParams.get("includeOk") === "1";
 
-  const appliances = await prisma.appliance.findMany({
-    where: home ? { homeId: home.id } : {},
-    include: { home: { select: { id: true, name: true } } },
-  });
+  const [appliances, projectRows] = await Promise.all([
+    prisma.appliance.findMany({
+      where: home ? { homeId: home.id } : {},
+      include: { home: { select: { id: true, name: true } } },
+    }),
+    prisma.project.findMany({
+      where: { ...(home ? { homeId: home.id } : {}), status: "PLANNED" },
+      include: { home: { select: { id: true, name: true } } },
+      orderBy: [{ targetOn: "asc" }, { title: "asc" }],
+    }),
+  ]);
 
   const homeNames = new Map(appliances.map((a) => [a.home.id, a.home.name]));
   const all = buildForecast(appliances);
@@ -26,6 +33,10 @@ export async function GET(request: Request) {
 
   const estimatedTotal = items.reduce(
     (sum, item) => sum + (item.estimatedCost ?? 0),
+    0,
+  );
+  const projectTotal = projectRows.reduce(
+    (sum, p) => sum + p.estimatedCostCents / 100,
     0,
   );
 
@@ -40,6 +51,11 @@ export async function GET(request: Request) {
     totals: {
       items: items.length,
       estimatedReplacementCostUsd: estimatedTotal,
+      plannedProjects: projectRows.length,
+      plannedProjectCostUsd: projectTotal,
+      // Replacements and projects together — the number to answer "what is
+      // this house going to cost us?"
+      combinedEstimatedCostUsd: Math.round((estimatedTotal + projectTotal) * 100) / 100,
       applianceCountNotForecast: appliances.filter(
         (a) => !a.installedOn && !a.modelYear,
       ).length,
@@ -68,6 +84,18 @@ export async function GET(request: Request) {
       status: item.status,
       estimatedReplacementCostUsd: item.estimatedCost,
       warrantyExpiresOn: isoDate(item.warrantyExpiresOn),
+    })),
+    // Work the household intends to do, as distinct from wear-based
+    // replacement. These have no expected-life calculation behind them; the
+    // cost and the date are whatever was entered.
+    projects: projectRows.map((p) => ({
+      id: p.id,
+      homeId: p.homeId,
+      homeName: p.home.name,
+      title: p.title,
+      estimatedCostUsd: p.estimatedCostCents / 100,
+      targetOn: isoDate(p.targetOn),
+      notes: p.notes,
     })),
   });
 }

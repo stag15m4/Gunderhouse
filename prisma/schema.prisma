@@ -51,6 +51,7 @@ model User {
   documentsUploaded    Document[]         @relation("DocumentUploadedBy")
   passwordResets       PasswordReset[]    @relation("PasswordResetUser")
   passwordResetsIssued PasswordReset[]    @relation("PasswordResetIssuedBy")
+  projectsCreated      Project[]          @relation("ProjectCreatedBy")
 }
 
 /// A single-use link letting someone set a new password. Issued by a household
@@ -144,6 +145,7 @@ model Home {
   appliances  Appliance[]
   maintenance MaintenanceEntry[]
   tasks       MaintenanceTask[]
+  projects    Project[]
   documents   Document[]
   invitations Invitation[]
 }
@@ -194,11 +196,11 @@ model Appliance {
   /// Date the unit went into service *here*. For something bought new this is
   /// also its age; for something bought used it isn't, which is what modelYear
   /// is for.
-  installedOn DateTime?
+  installedOn       DateTime?
   /// The unit's actual vintage, when it differs from installedOn — a used
   /// appliance is as old as it is, not as old as your ownership of it. The
   /// forecast ages from this whenever it's set.
-  modelYear Int?
+  modelYear         Int?
   warrantyExpiresOn DateTime?
 
   /// Per-unit override of the category's expected service life. Commercial-grade
@@ -303,6 +305,47 @@ model MaintenanceTask {
 
   @@index([homeId, nextDueOn])
   @@index([applianceId])
+}
+
+// ---------------------------------------------------------------------------
+// Planned projects
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  PLANNED
+  DONE
+}
+
+/// Work you intend to do and what you expect it to cost — a new kitchen floor,
+/// a driveway, a bathroom. Deliberately separate from MaintenanceTask: a task
+/// recurs on a schedule, a project happens once. Kept out of the maintenance
+/// log too, since an improvement isn't upkeep; the forecast is where planned
+/// spend belongs.
+model Project {
+  id     String @id @default(cuid())
+  homeId String
+
+  title String
+  notes String?
+
+  /// What you expect it to cost. Stored in cents, like every other amount.
+  estimatedCostCents Int
+  /// Roughly when — optional, since plenty of projects are "eventually".
+  targetOn           DateTime?
+
+  status          ProjectStatus @default(PLANNED)
+  completedOn     DateTime?
+  /// What it actually came to, recorded on completion.
+  actualCostCents Int?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  home      Home  @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([homeId, status, targetOn])
 }
 
 /// A pending write proposed by Alfred or Lucy, waiting on a human "yes".

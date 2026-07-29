@@ -47,7 +47,8 @@ export async function GET(request: Request) {
       {
         path: "/api/alfred/forecast",
         description:
-          "Appliances flagged against typical service life, most urgent first.",
+          "Appliances flagged against expected service life, most urgent first, " +
+          "plus planned projects and a combined cost total.",
         params: {
           home: "home id or name (optional)",
           includeOk:
