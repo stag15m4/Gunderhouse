@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
-import { BudgetKind } from "@prisma/client";
-import { requireUser, visibleHomes } from "@/lib/access";
+import { BudgetKind, BudgetVisibility } from "@prisma/client";
+import { visibleHomes } from "@/lib/access";
+import {
+  BUDGET_VISIBILITY_LABELS,
+  requireBudgetAdminPage,
+} from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import { archiveCategory, updateCategory } from "@/app/actions/budget";
 import {
@@ -20,7 +24,7 @@ export default async function CategoryPage({
 }) {
   const { categoryId } = await params;
   const { error } = await searchParams;
-  const user = await requireUser();
+  const user = await requireBudgetAdminPage();
 
   const category = await prisma.budgetCategory.findUnique({
     where: { id: categoryId },
@@ -79,6 +83,26 @@ export default async function CategoryPage({
               includeBlank="Household-wide"
               options={homes.map((h) => ({ value: h.id, label: h.name }))}
             />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField
+              label="Who can see it"
+              name="visibility"
+              defaultValue={category.visibility}
+              options={Object.entries(BUDGET_VISIBILITY_LABELS).map(
+                ([value, label]) => ({ value, label }),
+              )}
+              hint="Restricting a category hides its charges and everything logged against it."
+            />
+            <label className="flex items-end gap-2 pb-3 text-sm text-[var(--muted)]">
+              <input
+                type="checkbox"
+                name="assistantAccess"
+                defaultChecked={category.assistantAccess}
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+              Alfred and Lucy can read it
+            </label>
           </div>
           <Field
             label="Sort order"

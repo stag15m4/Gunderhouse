@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { BudgetKind, Cadence } from "@prisma/client";
-import { requireUser, visibleHomes } from "@/lib/access";
+import { BudgetKind, BudgetVisibility, Cadence } from "@prisma/client";
+import { visibleHomes } from "@/lib/access";
+import {
+  BUDGET_VISIBILITY_LABELS,
+  requireBudgetAdminPage,
+} from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import {
   CADENCE_LABELS,
@@ -29,7 +33,7 @@ export default async function BudgetSetupPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requireBudgetAdminPage();
   const { error } = await searchParams;
 
   const homes = await visibleHomes(user);
@@ -79,6 +83,12 @@ export default async function BudgetSetupPage({
                         ) : null}
                         {category.home ? (
                           <Badge tone="neutral">{category.home.name}</Badge>
+                        ) : null}
+                        {category.visibility === BudgetVisibility.ADMINS ? (
+                          <Badge tone="amber">Admins only</Badge>
+                        ) : null}
+                        {!category.assistantAccess ? (
+                          <Badge tone="neutral">Hidden from Alfred</Badge>
                         ) : null}
                       </div>
                       <div className="mt-0.5 text-xs text-[var(--subtle)]">
@@ -179,6 +189,26 @@ export default async function BudgetSetupPage({
                 options={homes.map((h) => ({ value: h.id, label: h.name }))}
                 hint="Only for costs tied to one house, like its insurance."
               />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SelectField
+                label="Who can see it"
+                name="visibility"
+                defaultValue={BudgetVisibility.ADMINS}
+                options={Object.entries(BUDGET_VISIBILITY_LABELS).map(
+                  ([value, label]) => ({ value, label }),
+                )}
+                hint="Income and bills usually stay with admins."
+              />
+              <label className="flex items-end gap-2 pb-3 text-sm text-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  name="assistantAccess"
+                  defaultChecked
+                  className="h-4 w-4 accent-[var(--accent)]"
+                />
+                Alfred and Lucy can read it
+              </label>
             </div>
             <button className="btn" type="submit">
               Add category

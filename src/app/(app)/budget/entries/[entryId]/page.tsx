@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { BudgetKind } from "@prisma/client";
-import { requireUser } from "@/lib/access";
+import {
+  canSeeCategory,
+  requireBudgetView,
+  visibleCategoryWhere,
+} from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import { sortCategories } from "@/lib/budget";
 import { deleteEntry, updateEntry } from "@/app/actions/budget";
@@ -22,13 +26,22 @@ export default async function EntryPage({
 }) {
   const { entryId } = await params;
   const { error, from } = await searchParams;
-  await requireUser();
+  const { user, access } = await requireBudgetView();
 
-  const entry = await prisma.budgetEntry.findUnique({ where: { id: entryId } });
-  if (!entry) notFound();
+  const entry = await prisma.budgetEntry.findUnique({
+    where: { id: entryId },
+    include: { category: { select: { visibility: true } } },
+  });
+  // A restricted entry is reported as missing rather than forbidden: saying
+  // "you may not see this" would confirm the line exists.
+  if (!entry || !canSeeCategory(user, entry.category) || !access.canEdit) {
+    notFound();
+  }
 
   const categories = sortCategories(
-    await prisma.budgetCategory.findMany({ where: { archived: false } }),
+    await prisma.budgetCategory.findMany({
+      where: { archived: false, ...visibleCategoryWhere(user) },
+    }),
   );
 
   const back = from && /^\/[A-Za-z0-9/_?=-]*$/.test(from) ? from : "/budget";

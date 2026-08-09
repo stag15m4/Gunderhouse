@@ -13,6 +13,7 @@ import {
   projectsCompletedIn,
 } from "@/lib/budget";
 import { setHomeBudget } from "@/app/actions/budget";
+import { budgetAccessFor, visibleCategoryWhere } from "@/lib/budget-access";
 import { createProject } from "@/app/actions/projects";
 import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatAddress, formatDate, formatMoney } from "@/lib/format";
@@ -36,7 +37,8 @@ export default async function HomeOverviewPage({
   params: Promise<{ homeId: string }>;
 }) {
   const { homeId } = await params;
-  const { home, role } = await requireHome(homeId);
+  const { home, role, user } = await requireHome(homeId);
+  const budget = budgetAccessFor(user);
 
   const thisMonth = { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
   const [
@@ -83,8 +85,10 @@ export default async function HomeOverviewPage({
     prisma.project.findMany({
       where: { homeId, status: ProjectStatus.DONE },
     }),
+    // Restricted categories are excluded here too, or a house's total would
+    // leak the mortgage to someone who can't see the mortgage.
     prisma.budgetCategory.findMany({
-      where: { homeId, archived: false },
+      where: { homeId, archived: false, ...visibleCategoryWhere(user) },
       include: { recurring: true },
     }),
   ]);
@@ -213,6 +217,7 @@ export default async function HomeOverviewPage({
         />
       </Section>
 
+      {budget.canView ? (
       <Section
         title="Monthly cost"
         description={`What this house is costing in ${monthLabel(thisMonth)}, and what it should be putting aside.`}
@@ -276,6 +281,7 @@ export default async function HomeOverviewPage({
           </form>
         ) : null}
       </Section>
+      ) : null}
 
       <Section
         title="Recent maintenance"

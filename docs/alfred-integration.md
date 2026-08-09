@@ -375,6 +375,7 @@ recurring charges inside them, and what each house cost.
   "home": null,
   "month": "2026-08",
   "monthLabel": "August 2026",
+  "withheldCategories": 1,
   "basis": "Every amount is a monthly figure. Recurring charges are smoothed to a monthly equivalent rather than landing in the month they're billed, so an annual premium shows as one twelfth each month. A single month here will not match a single bank statement; it answers what the household needs per month, which is the planning question.",
   "totals": {
     "incomeUsd": 7000,
@@ -452,6 +453,17 @@ Notes:
   and systems accrue monthly toward eventual replacement. It is **saving, not
   spending**, and is deliberately excluded from `expenseUsd`. Don't add it to
   the expense total.
+- **Categories can be withheld from this surface entirely.** Each one carries
+  an "Alfred and Lucy can read it" switch, set by a household admin. A category
+  with it off is absent from `categories`, its recurring charges are absent,
+  and everything logged against it is excluded from every total — including
+  `incomeUsd`. This is separate from who in the family can see a category: the
+  household may well let the assistant answer "when is the mortgage due" while
+  keeping the mortgage hidden from the kids, or the reverse.
+- `withheldCategories` counts how many are held back. **When it is non-zero the
+  totals are partial** — say so rather than reporting them as the household's
+  whole financial picture. A withheld income category makes `incomeUsd` read
+  `0`, which is not the same as earning nothing.
 - Read-only. There is no budget write endpoint.
 
 ---
@@ -689,6 +701,11 @@ These do not exist. Calling them returns `404` or `405`.
 - **No appliance, home, task, or document creation or editing.**
 - **No budget write.** `/api/alfred/budget` is read-only: nothing can log
   spending, add a category, or change a recurring charge through this surface.
+- **No way to reach a withheld category.** There is no parameter, override, or
+  id lookup that returns a category whose assistant switch is off. The same
+  reasoning as documents applies: this surface holds a shared token and has no
+  user identity behind it, so anything the household marks private to itself
+  stays out of reach.
 - **No delete of anything.**
 
 There is no `taskId` filter on `/api/alfred/maintenance`; entries carry `task`,

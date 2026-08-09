@@ -26,6 +26,21 @@ enum SystemRole {
   MEMBER
 }
 
+/// What someone may do with the household budget. Household admins (systemRole
+/// OWNER) always have full access and ignore this; it governs everyone else.
+///
+/// Deliberately separate from HomeRole: access to a house says nothing about
+/// whether you should see the family's income. A teenager can log maintenance
+/// on the house they live in without seeing what their parents earn.
+enum BudgetRole {
+  /// No budget at all — the tab doesn't appear.
+  NONE
+  /// Read what they're allowed to see; change nothing.
+  VIEWER
+  /// The above, plus logging and editing spending.
+  EDITOR
+}
+
 /// Per-home access level.
 enum HomeRole {
   ADMIN
@@ -39,6 +54,9 @@ model User {
   name              String
   passwordHash      String
   systemRole        SystemRole @default(MEMBER)
+  /// Budget access for non-admins. Defaults to NONE so a new person sees
+  /// nothing financial until someone deliberately grants it.
+  budgetRole        BudgetRole @default(NONE)
   /// Bumped whenever the password changes. Sessions issued before this moment
   /// are rejected, so a reset ends any session the old password had opened.
   passwordChangedAt DateTime   @default(now())
@@ -442,6 +460,14 @@ enum BudgetKind {
   EXPENSE
 }
 
+/// Who in the household may see a category — and everything inside it.
+enum BudgetVisibility {
+  /// Anyone with budget access.
+  EVERYONE
+  /// Household admins only. Income and the bills usually belong here.
+  ADMINS
+}
+
 enum Cadence {
   WEEKLY
   MONTHLY
@@ -462,6 +488,18 @@ model BudgetCategory {
   /// Set when the category belongs to one house — its mortgage, its insurance.
   /// Null for anything household-wide: groceries, streaming, income.
   homeId String?
+
+  /// Who may see this line, its recurring charges, and everything logged
+  /// against it. Defaults to admins only: money is private until it is
+  /// deliberately shared, not the other way round.
+  visibility BudgetVisibility @default(ADMINS)
+
+  /// Whether Alfred and Lucy may read this category. Separate from visibility
+  /// because the assistant is not a household member — it holds a shared token
+  /// and has no identity behind it. Leaving the mortgage readable so Alfred can
+  /// answer "when is it due" is a different decision from letting the kids see
+  /// it, and the two shouldn't be forced together.
+  assistantAccess Boolean @default(true)
 
   sortOrder Int     @default(0)
   /// Archived categories keep their history but stop appearing in new months.

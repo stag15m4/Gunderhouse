@@ -2,8 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BudgetKind, Cadence, HomeRole } from "@prisma/client";
-import { requireHome, requireUser } from "@/lib/access";
+import {
+  BudgetKind,
+  BudgetVisibility,
+  Cadence,
+  HomeRole,
+} from "@prisma/client";
+import { requireHome } from "@/lib/access";
+import {
+  canSeeCategory,
+  requireBudgetAdmin,
+  requireBudgetEdit,
+} from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import {
   enumValue,
@@ -17,13 +27,34 @@ import {
 import { isRedirectError, withError } from "@/lib/action-utils";
 
 /**
- * The budget is household-wide: groceries and income belong to nobody's house
- * in particular. Anyone signed in can see and change it — the per-home roles
- * govern homes, not the family's money. Categories bound to a house are the one
- * exception, and they're checked against that home below.
+ * Logging spending against a category requires being able to see it. Otherwise
+ * a guessed id would let someone write to — and infer the existence of — a line
+ * they aren't allowed to know about.
  */
-async function requireBudgetAccess() {
-  return requireUser();
+async function categoryForWrite(form: FormData, key = "categoryId") {
+  const user = await requireBudgetEdit();
+  const categoryId = requireText(form, key, "Category");
+  const category = await prisma.budgetCategory.findUnique({
+    where: { id: categoryId },
+    select: { id: true, visibility: true },
+  });
+  if (!category || !canSeeCategory(user, category)) {
+    throw new Error("That category doesn't exist.");
+  }
+  return { user, categoryId };
+}
+
+/** An entry is only reachable through a category you can see. */
+async function requireVisibleEntry(entryId: string) {
+  const user = await requireBudgetEdit();
+  const entry = await prisma.budgetEntry.findUnique({
+    where: { id: entryId },
+    select: { id: true, category: { select: { visibility: true } } },
+  });
+  if (!entry || !canSeeCategory(user, entry.category)) {
+    throw new Error("That entry doesn't exist.");
+  }
+  return entry;
 }
 
 function moneyRequired(form: FormData, key: string, label: string): number {
@@ -50,7 +81,7 @@ function backTo(form: FormData, fallback = "/budget"): string {
 export async function createCategory(form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     const homeId = optionalStr(form, "homeId");
     await checkHomeBinding(homeId);
 
@@ -61,6 +92,13 @@ export async function createCategory(form: FormData) {
         monthlyTargetCents: optionalMoneyCents(form, "monthlyTarget"),
         homeId,
         sortOrder: optionalInt(form, "sortOrder") ?? 0,
+        visibility: enumValue(
+          form,
+          "visibility",
+          BudgetVisibility,
+          BudgetVisibility.ADMINS,
+        ),
+        assistantAccess: str(form, "assistantAccess") === "on",
       },
     });
   } catch (error) {
@@ -76,7 +114,7 @@ export async function createCategory(form: FormData) {
 export async function updateCategory(categoryId: string, form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     const homeId = optionalStr(form, "homeId");
     await checkHomeBinding(homeId);
 
@@ -88,6 +126,13 @@ export async function updateCategory(categoryId: string, form: FormData) {
         monthlyTargetCents: optionalMoneyCents(form, "monthlyTarget"),
         homeId,
         sortOrder: optionalInt(form, "sortOrder") ?? 0,
+        visibility: enumValue(
+          form,
+          "visibility",
+          BudgetVisibility,
+          BudgetVisibility.ADMINS,
+        ),
+        assistantAccess: str(form, "assistantAccess") === "on",
       },
     });
   } catch (error) {
@@ -108,7 +153,7 @@ export async function updateCategory(categoryId: string, form: FormData) {
 export async function archiveCategory(categoryId: string, form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     const [entries, recurring] = await Promise.all([
       prisma.budgetEntry.count({ where: { categoryId } }),
       prisma.recurringItem.count({ where: { categoryId } }),
@@ -135,7 +180,7 @@ export async function archiveCategory(categoryId: string, form: FormData) {
 export async function restoreCategory(categoryId: string, form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     await prisma.budgetCategory.update({
       where: { id: categoryId },
       data: { archived: false },
@@ -157,7 +202,7 @@ export async function restoreCategory(categoryId: string, form: FormData) {
 export async function createRecurring(form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     await prisma.recurringItem.create({
       data: {
         categoryId: requireText(form, "categoryId", "Category"),
@@ -182,7 +227,7 @@ export async function createRecurring(form: FormData) {
 export async function updateRecurring(itemId: string, form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     await prisma.recurringItem.update({
       where: { id: itemId },
       data: {
@@ -209,7 +254,7 @@ export async function updateRecurring(itemId: string, form: FormData) {
 export async function deleteRecurring(itemId: string, form: FormData) {
   const back = backTo(form, "/budget/setup");
   try {
-    await requireBudgetAccess();
+    await requireBudgetAdmin();
     await prisma.recurringItem.delete({ where: { id: itemId } });
   } catch (error) {
     if (isRedirectError(error)) throw error;
@@ -233,14 +278,14 @@ export async function deleteRecurring(itemId: string, form: FormData) {
 export async function createEntry(form: FormData) {
   const back = backTo(form);
   try {
-    const user = await requireBudgetAccess();
+    const { user, categoryId } = await categoryForWrite(form);
     const occurredOn =
       optionalDate(form, "occurredOn") ??
       new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
 
     await prisma.budgetEntry.create({
       data: {
-        categoryId: requireText(form, "categoryId", "Category"),
+        categoryId,
         occurredOn,
         amountCents: moneyRequired(form, "amount", "Amount"),
         description: optionalStr(form, "description"),
@@ -260,11 +305,12 @@ export async function createEntry(form: FormData) {
 export async function updateEntry(entryId: string, form: FormData) {
   const back = backTo(form);
   try {
-    await requireBudgetAccess();
+    const { categoryId } = await categoryForWrite(form);
+    await requireVisibleEntry(entryId);
     await prisma.budgetEntry.update({
       where: { id: entryId },
       data: {
-        categoryId: requireText(form, "categoryId", "Category"),
+        categoryId,
         occurredOn:
           optionalDate(form, "occurredOn") ??
           new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z"),
@@ -285,7 +331,8 @@ export async function updateEntry(entryId: string, form: FormData) {
 export async function deleteEntry(entryId: string, form: FormData) {
   const back = backTo(form);
   try {
-    await requireBudgetAccess();
+    await requireBudgetEdit();
+    await requireVisibleEntry(entryId);
     await prisma.budgetEntry.delete({ where: { id: entryId } });
   } catch (error) {
     if (isRedirectError(error)) throw error;

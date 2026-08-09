@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { HomeRole, SystemRole } from "@prisma/client";
+import { BudgetRole, HomeRole, SystemRole } from "@prisma/client";
 import { signOut } from "@/auth";
 import { AccessError, requireHome, requireOwner, requireUser } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
@@ -123,6 +123,29 @@ export async function acceptInvitation(token: string, form: FormData) {
   }
 
   redirect("/login?welcome=1");
+}
+
+/**
+ * Budget access is set separately from household standing, because they answer
+ * different questions. Someone can look after a house without being shown what
+ * the household earns.
+ */
+export async function setBudgetRole(userId: string, form: FormData) {
+  try {
+    await requireOwner();
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        budgetRole: enumValue(form, "budgetRole", BudgetRole, BudgetRole.NONE),
+      },
+    });
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    redirect(withError("/household", error));
+  }
+
+  revalidatePath("/household");
+  redirect("/household");
 }
 
 export async function setSystemRole(userId: string, form: FormData) {

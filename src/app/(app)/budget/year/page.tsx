@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BudgetKind } from "@prisma/client";
-import { requireUser, visibleHomes } from "@/lib/access";
+import { visibleHomes } from "@/lib/access";
+import { requireBudgetView, visibleCategoryWhere } from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import {
   buildCategoryLine,
@@ -27,7 +28,7 @@ export default async function BudgetYearPage({
 }: {
   searchParams: Promise<{ y?: string }>;
 }) {
-  const user = await requireUser();
+  const { user } = await requireBudgetView();
   const { y } = await searchParams;
   const now = new Date();
   const year = /^\d{4}$/.test(y ?? "") ? Number(y) : now.getUTCFullYear();
@@ -39,9 +40,15 @@ export default async function BudgetYearPage({
 
   const [categories, entries, maintenance, projects, appliances] =
     await Promise.all([
-      prisma.budgetCategory.findMany({ include: { recurring: true } }),
+      prisma.budgetCategory.findMany({
+        where: visibleCategoryWhere(user),
+        include: { recurring: true },
+      }),
       prisma.budgetEntry.findMany({
-        where: { occurredOn: { gte: from, lt: to } },
+        where: {
+          occurredOn: { gte: from, lt: to },
+          category: visibleCategoryWhere(user),
+        },
       }),
       prisma.maintenanceEntry.findMany({
         where: { homeId: { in: homeIds }, performedOn: { gte: from, lt: to } },

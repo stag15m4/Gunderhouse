@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Cadence } from "@prisma/client";
-import { requireUser } from "@/lib/access";
+import { requireBudgetAdminPage } from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import { CADENCE_LABELS, monthlyEquivalent, sortCategories } from "@/lib/budget";
 import { deleteRecurring, updateRecurring } from "@/app/actions/budget";
@@ -23,7 +23,7 @@ export default async function RecurringPage({
 }) {
   const { itemId } = await params;
   const { error } = await searchParams;
-  await requireUser();
+  await requireBudgetAdminPage();
 
   const item = await prisma.recurringItem.findUnique({ where: { id: itemId } });
   if (!item) notFound();

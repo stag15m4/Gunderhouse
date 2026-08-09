@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BudgetKind } from "@prisma/client";
-import { requireUser, visibleHomes } from "@/lib/access";
+import { visibleHomes } from "@/lib/access";
+import { requireBudgetView, visibleCategoryWhere } from "@/lib/budget-access";
 import { prisma } from "@/lib/prisma";
 import {
   buildCategoryLine,
@@ -33,7 +34,7 @@ export default async function BudgetPage({
 }: {
   searchParams: Promise<{ m?: string; error?: string }>;
 }) {
-  const user = await requireUser();
+  const { user, access } = await requireBudgetView();
   const { m, error } = await searchParams;
   const month = parseMonth(m);
   const start = monthStart(month);
@@ -46,9 +47,17 @@ export default async function BudgetPage({
     await Promise.all([
       // Archived categories are fetched too: one may still carry this month's
       // history, and its name is needed to label entries logged against it.
-      prisma.budgetCategory.findMany({ include: { recurring: true } }),
+      // Restricted ones are filtered in the query, not after — a category this
+      // person can't see must never reach the page, where a total would leak it.
+      prisma.budgetCategory.findMany({
+        where: visibleCategoryWhere(user),
+        include: { recurring: true },
+      }),
       prisma.budgetEntry.findMany({
-        where: { occurredOn: { gte: start, lt: end } },
+        where: {
+          occurredOn: { gte: start, lt: end },
+          category: visibleCategoryWhere(user),
+        },
         orderBy: { occurredOn: "desc" },
       }),
       prisma.maintenanceEntry.findMany({
@@ -108,9 +117,11 @@ export default async function BudgetPage({
         title="Budget"
         subtitle="Income, recurring costs, and what the houses are costing. Everything is shown as a monthly figure."
         actions={
-          <Link className="btn-secondary" href="/budget/setup">
-            Set up
-          </Link>
+          access.canAdminister ? (
+            <Link className="btn-secondary" href="/budget/setup">
+              Set up
+            </Link>
+          ) : null
         }
       />
 
@@ -179,6 +190,13 @@ export default async function BudgetPage({
           <LineTable lines={expenses} />
         )}
       </Section>
+
+      {!access.canSeeRestricted ? (
+        <p className="text-xs text-[var(--faint)]">
+          Some categories are restricted to household admins and aren&apos;t
+          shown here, so these totals cover only what you can see.
+        </p>
+      ) : null}
 
       <Section
         title="Houses"
@@ -253,7 +271,9 @@ export default async function BudgetPage({
         title="Log what you spent"
         description="One line a month per category is plenty — “groceries, $1,240”. More detail is allowed, never required."
       >
-        {liveCategories.length === 0 ? (
+        {!access.canEdit ? (
+          <Empty>You can see the budget but not change it.</Empty>
+        ) : liveCategories.length === 0 ? (
           <Empty>Add a category first, under Set up.</Empty>
         ) : (
           <form action={createEntry} className="space-y-4">
@@ -310,12 +330,14 @@ export default async function BudgetPage({
                     <span className="tabular-nums text-[var(--text)]">
                       {formatMoney(entry.amountCents)}
                     </span>
-                    <Link
-                      className="text-xs text-[var(--subtle)] hover:text-[var(--text)]"
-                      href={`/budget/entries/${entry.id}?from=${encodeURIComponent(here)}`}
-                    >
-                      Edit
-                    </Link>
+                    {access.canEdit ? (
+                      <Link
+                        className="text-xs text-[var(--subtle)] hover:text-[var(--text)]"
+                        href={`/budget/entries/${entry.id}?from=${encodeURIComponent(here)}`}
+                      >
+                        Edit
+                      </Link>
+                    ) : null}
                   </div>
                 </li>
               );

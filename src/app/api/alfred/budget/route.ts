@@ -34,9 +34,18 @@ export async function GET(request: Request) {
 
   const [categories, entries, maintenance, projects, appliances, homes] =
     await Promise.all([
-      prisma.budgetCategory.findMany({ include: { recurring: true } }),
+      // Only what the household has marked readable by the assistant. This
+      // surface has no user identity behind it — it holds a shared token — so
+      // a category opted out here is invisible regardless of who is asking.
+      prisma.budgetCategory.findMany({
+        where: { assistantAccess: true },
+        include: { recurring: true },
+      }),
       prisma.budgetEntry.findMany({
-        where: { occurredOn: { gte: start, lt: end } },
+        where: {
+          occurredOn: { gte: start, lt: end },
+          category: { assistantAccess: true },
+        },
       }),
       prisma.maintenanceEntry.findMany({
         where: {
@@ -81,6 +90,11 @@ export async function GET(request: Request) {
     home: home ?? null,
     month: monthKey(month),
     monthLabel: monthLabel(month),
+    // Flagged so a caller can say the totals are partial rather than quoting
+    // them as the whole picture.
+    withheldCategories: await prisma.budgetCategory.count({
+      where: { assistantAccess: false, archived: false },
+    }),
     basis:
       "Every amount is a monthly figure. Recurring charges are smoothed to a " +
       "monthly equivalent rather than landing in the month they're billed, so " +
