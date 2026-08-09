@@ -26,6 +26,21 @@ enum SystemRole {
   MEMBER
 }
 
+/// What someone may do with the household budget. Household admins (systemRole
+/// OWNER) always have full access and ignore this; it governs everyone else.
+///
+/// Deliberately separate from HomeRole: access to a house says nothing about
+/// whether you should see the family's income. A teenager can log maintenance
+/// on the house they live in without seeing what their parents earn.
+enum BudgetRole {
+  /// No budget at all — the tab doesn't appear.
+  NONE
+  /// Read what they're allowed to see; change nothing.
+  VIEWER
+  /// The above, plus logging and editing spending.
+  EDITOR
+}
+
 /// Per-home access level.
 enum HomeRole {
   ADMIN
@@ -39,6 +54,9 @@ model User {
   name              String
   passwordHash      String
   systemRole        SystemRole @default(MEMBER)
+  /// Budget access for non-admins. Defaults to NONE so a new person sees
+  /// nothing financial until someone deliberately grants it.
+  budgetRole        BudgetRole @default(NONE)
   /// Bumped whenever the password changes. Sessions issued before this moment
   /// are rejected, so a reset ends any session the old password had opened.
   passwordChangedAt DateTime   @default(now())
@@ -51,6 +69,8 @@ model User {
   documentsUploaded    Document[]         @relation("DocumentUploadedBy")
   passwordResets       PasswordReset[]    @relation("PasswordResetUser")
   passwordResetsIssued PasswordReset[]    @relation("PasswordResetIssuedBy")
+  projectsCreated      Project[]          @relation("ProjectCreatedBy")
+  budgetEntries        BudgetEntry[]      @relation("BudgetEntryCreatedBy")
 }
 
 /// A single-use link letting someone set a new password. Issued by a household
@@ -137,6 +157,11 @@ model Home {
   purchasedOn DateTime?
   notes       String?
 
+  /// What you plan to spend on this house per month — upkeep and improvements.
+  /// Optional; without it the budget reports what the house costs without
+  /// judging it against a target.
+  monthlyBudgetCents Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -144,8 +169,10 @@ model Home {
   appliances  Appliance[]
   maintenance MaintenanceEntry[]
   tasks       MaintenanceTask[]
+  projects    Project[]
   documents   Document[]
   invitations Invitation[]
+  budgetCategories BudgetCategory[]
 }
 
 // ---------------------------------------------------------------------------
@@ -194,11 +221,11 @@ model Appliance {
   /// Date the unit went into service *here*. For something bought new this is
   /// also its age; for something bought used it isn't, which is what modelYear
   /// is for.
-  installedOn DateTime?
+  installedOn       DateTime?
   /// The unit's actual vintage, when it differs from installedOn — a used
   /// appliance is as old as it is, not as old as your ownership of it. The
   /// forecast ages from this whenever it's set.
-  modelYear Int?
+  modelYear         Int?
   warrantyExpiresOn DateTime?
 
   /// Per-unit override of the category's expected service life. Commercial-grade
@@ -305,6 +332,49 @@ model MaintenanceTask {
   @@index([applianceId])
 }
 
+// ---------------------------------------------------------------------------
+// Planned projects
+// ---------------------------------------------------------------------------
+
+enum ProjectStatus {
+  PLANNED
+  DONE
+}
+
+/// Work you intend to do and what you expect it to cost — a new kitchen floor,
+/// a driveway, a bathroom. Deliberately separate from MaintenanceTask: a task
+/// recurs on a schedule, a project happens once. Kept out of the maintenance
+/// log too, since an improvement isn't upkeep; the forecast is where planned
+/// spend belongs.
+model Project {
+  id     String @id @default(cuid())
+  homeId String
+
+  title String
+  notes String?
+
+  /// What you expect it to cost, in cents like every other amount. Optional:
+  /// this doubles as the house to-do list, and plenty gets written down before
+  /// it gets priced. Unpriced projects are listed but left out of the totals.
+  estimatedCostCents Int?
+  /// Roughly when — optional, since plenty of projects are "eventually".
+  targetOn           DateTime?
+
+  status          ProjectStatus @default(PLANNED)
+  completedOn     DateTime?
+  /// What it actually came to, recorded on completion.
+  actualCostCents Int?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  home      Home  @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([homeId, status, targetOn])
+}
+
 /// A pending write proposed by Alfred or Lucy, waiting on a human "yes".
 ///
 /// The assistant asks first and gets back a summary plus this token; nothing
@@ -364,4 +434,131 @@ model Document {
   uploadedBy User? @relation("DocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([homeId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Household budget
+//
+// Deliberately not a general-ledger accounting system. Two kinds of money are
+// tracked differently, because they behave differently:
+//
+//   - Recurring, known amounts (Disney+, insurance, the mortgage) are entered
+//     once as a RecurringItem and counted every month from then on. There is
+//     nothing to confirm each month; the charge happens whether or not anyone
+//     opens the app.
+//   - Variable amounts (groceries, a one-off repair, income received) are
+//     BudgetEntry rows. One row a month per category is enough — "groceries,
+//     $1,240, March" — and finer entry is allowed but never required. Budget
+//     tools die when they demand per-receipt bookkeeping.
+//
+// House upkeep is not re-entered here at all. Maintenance entries and finished
+// projects already carry costs, so the budget reads them where they are.
+// ---------------------------------------------------------------------------
+
+enum BudgetKind {
+  INCOME
+  EXPENSE
+}
+
+/// Who in the household may see a category — and everything inside it.
+enum BudgetVisibility {
+  /// Anyone with budget access.
+  EVERYONE
+  /// Household admins only. Income and the bills usually belong here.
+  ADMINS
+}
+
+enum Cadence {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+/// A line in the budget: "Groceries", "Subscriptions", "Angela's salary".
+model BudgetCategory {
+  id   String     @id @default(cuid())
+  name String
+  kind BudgetKind @default(EXPENSE)
+
+  /// What you plan for this category each month. Null means "track it, don't
+  /// judge it" — useful for categories that are purely their recurring items.
+  monthlyTargetCents Int?
+
+  /// Set when the category belongs to one house — its mortgage, its insurance.
+  /// Null for anything household-wide: groceries, streaming, income.
+  homeId String?
+
+  /// Who may see this line, its recurring charges, and everything logged
+  /// against it. Defaults to admins only: money is private until it is
+  /// deliberately shared, not the other way round.
+  visibility BudgetVisibility @default(ADMINS)
+
+  /// Whether Alfred and Lucy may read this category. Separate from visibility
+  /// because the assistant is not a household member — it holds a shared token
+  /// and has no identity behind it. Leaving the mortgage readable so Alfred can
+  /// answer "when is it due" is a different decision from letting the kids see
+  /// it, and the two shouldn't be forced together.
+  assistantAccess Boolean @default(true)
+
+  sortOrder Int     @default(0)
+  /// Archived categories keep their history but stop appearing in new months.
+  archived  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  home      Home?           @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  recurring RecurringItem[]
+  entries   BudgetEntry[]
+
+  @@index([archived, sortOrder])
+  @@index([homeId])
+}
+
+/// A charge that repeats on its own: a subscription, a premium, a payment.
+model RecurringItem {
+  id         String @id @default(cuid())
+  categoryId String
+
+  label       String
+  amountCents Int
+  cadence     Cadence @default(MONTHLY)
+
+  /// Bounds, for things that haven't started yet or have ended. A month outside
+  /// this window doesn't count the item.
+  startsOn DateTime?
+  endsOn   DateTime?
+  active   Boolean   @default(true)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId, active])
+}
+
+/// Money that actually moved: groceries bought, a paycheque received.
+model BudgetEntry {
+  id         String @id @default(cuid())
+  categoryId String
+
+  occurredOn  DateTime
+  amountCents Int
+  description String?
+
+  createdById String?
+  source      LogSource @default(APP)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category  BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("BudgetEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([categoryId, occurredOn])
+  @@index([occurredOn])
 }

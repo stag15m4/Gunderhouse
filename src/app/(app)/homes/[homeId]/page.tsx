@@ -1,7 +1,21 @@
 import Link from "next/link";
-import { canAdminister, requireHome } from "@/lib/access";
+import { ProjectStatus } from "@prisma/client";
+import { canAdminister, canEdit, requireHome } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { buildForecast, upcomingOnly } from "@/lib/forecast";
+import { sortProjects } from "@/lib/projects";
+import {
+  buildCategoryLine,
+  buildHomeMonth,
+  monthEnd,
+  monthLabel,
+  monthStart,
+  projectsCompletedIn,
+} from "@/lib/budget";
+import { setHomeBudget } from "@/app/actions/budget";
+import { budgetAccessFor, visibleCategoryWhere } from "@/lib/budget-access";
+import { createProject } from "@/app/actions/projects";
+import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatAddress, formatDate, formatMoney } from "@/lib/format";
 import {
   APPLIANCE_CATEGORY_LABELS,
@@ -11,6 +25,7 @@ import {
 import {
   Badge,
   Empty,
+  Field,
   ForecastBadge,
   PageHeader,
   Section,
@@ -22,9 +37,19 @@ export default async function HomeOverviewPage({
   params: Promise<{ homeId: string }>;
 }) {
   const { homeId } = await params;
-  const { home, role } = await requireHome(homeId);
+  const { home, role, user } = await requireHome(homeId);
+  const budget = budgetAccessFor(user);
 
-  const [appliances, recentMaintenance, spend, documentCount] = await Promise.all([
+  const thisMonth = { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
+  const [
+    appliances,
+    recentMaintenance,
+    spend,
+    documentCount,
+    projectRows,
+    doneProjects,
+    homeCategories,
+  ] = await Promise.all([
     prisma.appliance.findMany({
       where: { homeId },
       select: {
@@ -54,9 +79,37 @@ export default async function HomeOverviewPage({
       _sum: { costCents: true },
     }),
     prisma.document.count({ where: { homeId } }),
+    prisma.project.findMany({
+      where: { homeId, status: ProjectStatus.PLANNED },
+    }),
+    prisma.project.findMany({
+      where: { homeId, status: ProjectStatus.DONE },
+    }),
+    // Restricted categories are excluded here too, or a house's total would
+    // leak the mortgage to someone who can't see the mortgage.
+    prisma.budgetCategory.findMany({
+      where: { homeId, archived: false, ...visibleCategoryWhere(user) },
+      include: { recurring: true },
+    }),
   ]);
 
   const upcoming = upcomingOnly(buildForecast(appliances)).slice(0, 5);
+  const projects = sortProjects(projectRows);
+
+  const monthMaintenance = await prisma.maintenanceEntry.findMany({
+    where: {
+      homeId,
+      performedOn: { gte: monthStart(thisMonth), lt: monthEnd(thisMonth) },
+    },
+  });
+  const homeMonth = buildHomeMonth({
+    home,
+    maintenance: monthMaintenance,
+    projects: projectsCompletedIn(doneProjects, thisMonth),
+    categoryLines: homeCategories.map((c) => buildCategoryLine(c, [], thisMonth)),
+    appliances,
+  });
+  const editable = canEdit(role);
   const address = formatAddress(home);
 
   return (
@@ -146,6 +199,89 @@ export default async function HomeOverviewPage({
           </div>
         )}
       </Section>
+
+      <Section
+        title="Projects"
+        description="Work planned for this house, and what it's expected to cost."
+      >
+        <ProjectList
+          projects={projects}
+          editableHomeIds={editable ? new Set([homeId]) : new Set()}
+          returnTo={`/homes/${homeId}`}
+          empty="Nothing on the list for this house yet."
+        />
+        <AddProjectForm
+          action={createProject}
+          homes={editable ? [{ id: homeId, name: home.name }] : []}
+          returnTo={`/homes/${homeId}`}
+        />
+      </Section>
+
+      {budget.canView ? (
+      <Section
+        title="Monthly cost"
+        description={`What this house is costing in ${monthLabel(thisMonth)}, and what it should be putting aside.`}
+        actions={
+          <Link
+            className="text-sm text-[var(--muted)] hover:text-[var(--text)]"
+            href="/budget"
+          >
+            Full budget →
+          </Link>
+        }
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="This month" value={formatMoney(homeMonth.totalCents)} />
+          <Stat
+            label="Monthly budget"
+            value={
+              homeMonth.budgetCents === null
+                ? "—"
+                : formatMoney(homeMonth.budgetCents)
+            }
+          />
+          <Stat
+            label="Difference"
+            value={
+              homeMonth.varianceCents === null
+                ? "—"
+                : formatMoney(homeMonth.varianceCents)
+            }
+          />
+          <Stat
+            label="Set aside / mo"
+            value={formatMoney(homeMonth.reserveCents)}
+          />
+        </div>
+        <p className="mt-3 text-xs text-[var(--subtle)]">
+          The set-aside is what the appliances and systems here accrue each
+          month against eventual replacement — {formatMoney(homeMonth.reserveCents * 12)} a
+          year. Saving, not spending.
+        </p>
+        {canAdminister(role) ? (
+          <form
+            action={setHomeBudget.bind(null, homeId)}
+            className="mt-4 flex items-end gap-3 border-t border-[var(--border-soft)] pt-4"
+          >
+            <div className="w-48">
+              <Field
+                label="Monthly budget"
+                name="monthlyBudget"
+                defaultValue={
+                  home.monthlyBudgetCents !== null
+                    ? (home.monthlyBudgetCents / 100).toFixed(2)
+                    : ""
+                }
+                hint="Blank to track without a target."
+              />
+            </div>
+            <button className="btn-secondary" type="submit">
+              Save
+            </button>
+          </form>
+        ) : null}
+      </Section>
+      ) : null}
 
       <Section
         title="Recent maintenance"

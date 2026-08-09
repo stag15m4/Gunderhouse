@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { HomeRole, type Home, type SystemRole } from "@prisma/client";
+import {
+  HomeRole,
+  type BudgetRole,
+  type Home,
+  type SystemRole,
+} from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -10,6 +15,9 @@ import { prisma } from "@/lib/prisma";
  *   OWNER  — peer household admin. Implicit ADMIN on every home, can create
  *            homes, invite people, and change anyone's roles.
  *   MEMBER — sees only the homes they hold a HomeMembership for.
+ *
+ * Budget access (`User.budgetRole`) is a separate axis entirely — see
+ * lib/budget-access.ts. Neither systemRole MEMBER nor any home role grants it.
  *
  * Per-home role (`HomeMembership.role`):
  *   VIEWER — read appliances, maintenance, documents, forecast.
@@ -23,6 +31,8 @@ export type SessionUser = {
   name: string;
   email: string;
   systemRole: SystemRole;
+  /** Budget access for non-admins; see lib/budget-access.ts. */
+  budgetRole: BudgetRole;
 };
 
 const RANK: Record<HomeRole, number> = {
@@ -72,6 +82,7 @@ export async function currentUser(): Promise<SessionCheck> {
       name: true,
       email: true,
       systemRole: true,
+      budgetRole: true,
       passwordChangedAt: true,
     },
   });
@@ -96,6 +107,7 @@ export async function currentUser(): Promise<SessionCheck> {
       name: account.name,
       email: account.email,
       systemRole: account.systemRole,
+      budgetRole: account.budgetRole,
     },
     reason: null,
   };

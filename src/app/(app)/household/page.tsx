@@ -7,8 +7,10 @@ import {
   removeUser,
   revokeInvitation,
   revokePasswordReset,
+  setBudgetRole,
   setSystemRole,
 } from "@/app/actions/members";
+import { BUDGET_ROLE_LABELS } from "@/lib/budget-access";
 import { formatDate } from "@/lib/format";
 import {
   enumOptions,
@@ -80,6 +82,7 @@ export default async function HouseholdPage({
             <tr>
               <th>Person</th>
               <th>Household standing</th>
+              <th>Budget</th>
               <th>Homes</th>
               <th />
             </tr>
@@ -111,6 +114,30 @@ export default async function HouseholdPage({
                       Save
                     </button>
                   </form>
+                </td>
+                <td>
+                  {user.systemRole === SystemRole.OWNER ? (
+                    <Badge tone="green">Full budget</Badge>
+                  ) : (
+                    <form
+                      action={setBudgetRole.bind(null, user.id)}
+                      className="flex items-end gap-2"
+                    >
+                      <div className="w-44">
+                        <SelectField
+                          label=""
+                          name="budgetRole"
+                          defaultValue={user.budgetRole}
+                          options={Object.entries(BUDGET_ROLE_LABELS).map(
+                            ([value, label]) => ({ value, label }),
+                          )}
+                        />
+                      </div>
+                      <button className="btn-secondary" type="submit">
+                        Save
+                      </button>
+                    </form>
+                  )}
                 </td>
                 <td>
                   {user.systemRole === SystemRole.OWNER ? (

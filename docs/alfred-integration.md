@@ -1,6 +1,6 @@
 # Gunderhouse — `/api/alfred/*` integration contract
 
-Complete external-caller reference. Accurate as of commit `c44ae11`.
+Complete external-caller reference. Accurate as of August 2026, including the household budget.
 
 Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
 replacement forecasting, and routine tasks, plus exactly one write: completing a
@@ -275,7 +275,11 @@ Appliances measured against typical service life.
   "totals": {
     "items": 2,
     "estimatedReplacementCostUsd": 17000,
-    "applianceCountNotForecast": 1
+    "applianceCountNotForecast": 1,
+    "plannedProjects": 2,
+    "plannedProjectCostUsd": 3000,
+    "unpricedProjects": 1,
+    "combinedEstimatedCostUsd": 20000
   },
   "items": [
     {
@@ -297,6 +301,26 @@ Appliances measured against typical service life.
       "estimatedReplacementCostUsd": 2000,
       "warrantyExpiresOn": "2014-04-15"
     }
+  ],
+  "projects": [
+    {
+      "id": "cms0pqr678",
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "title": "New kitchen floor",
+      "estimatedCostUsd": 3000,
+      "targetOn": "2026-09-01",
+      "notes": null
+    },
+    {
+      "id": "cms0stu901",
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "title": "Regrade the side yard",
+      "estimatedCostUsd": null,
+      "targetOn": null,
+      "notes": null
+    }
   ]
 }
 ```
@@ -317,12 +341,134 @@ Notes:
 - `expectedLifespanYears.overridden` is `true` when that unit's range was set by
   hand. Commercial-grade equipment routinely outlasts its category, so an
   override is the difference between a useful forecast and a false alarm.
+- `projects` lists planned work the household intends to do — a floor, a
+  driveway — with the cost it's expected to run to. This doubles as the
+  household's to-do list per house. Unlike `items` these carry no expected-life
+  calculation: the cost and date are whatever was entered. Completed projects
+  are omitted. `totals.combinedEstimatedCostUsd` adds replacements and projects
+  together, which is the number behind "what is this house going to cost us?"
+- `estimatedCostUsd` is **`null` when the project hasn't been priced yet**, not
+  `0`. Such projects are excluded from `plannedProjectCostUsd` and counted in
+  `totals.unpricedProjects`, so a non-zero count means the cost totals
+  understate the real figure. Say so rather than quoting the total flat.
 - `estimatedReplacementCostUsd` comes from a rough per-category table. It is a
   planning hint, not a quote, and may be `null`.
 
 ---
 
-## 9. `GET /api/alfred/tasks`
+## 9. `GET /api/alfred/budget`
+
+The household budget for one month: income, expense categories with the
+recurring charges inside them, and what each house cost.
+
+**Query params**
+
+| Param   | Meaning |
+| ------- | ------- |
+| `month` | `YYYY-MM`. Optional; defaults to the current month. |
+| `home`  | Home id or name. Optional; restricts the `homes` array. |
+
+**Response**
+
+```json
+{
+  "home": null,
+  "month": "2026-08",
+  "monthLabel": "August 2026",
+  "withheldCategories": 1,
+  "basis": "Every amount is a monthly figure. Recurring charges are smoothed to a monthly equivalent rather than landing in the month they're billed, so an annual premium shows as one twelfth each month. A single month here will not match a single bank statement; it answers what the household needs per month, which is the planning question.",
+  "totals": {
+    "incomeUsd": 7000,
+    "expenseUsd": 1718.98,
+    "netUsd": 5281.02,
+    "plannedIncomeUsd": 7000,
+    "plannedExpenseUsd": 1760,
+    "plannedNetUsd": 5240,
+    "homeReserveUsd": 15.15
+  },
+  "categories": [
+    {
+      "id": "cms0cat001",
+      "name": "Groceries",
+      "kind": "EXPENSE",
+      "monthlyTargetUsd": 1200,
+      "committedUsd": 0,
+      "loggedUsd": 1240,
+      "actualUsd": 1240,
+      "varianceUsd": 40,
+      "recurring": []
+    },
+    {
+      "id": "cms0cat002",
+      "name": "Subscriptions",
+      "kind": "EXPENSE",
+      "monthlyTargetUsd": 60,
+      "committedUsd": 38.98,
+      "loggedUsd": 0,
+      "actualUsd": 38.98,
+      "varianceUsd": -21.02,
+      "recurring": [
+        { "id": "cms0rec001", "label": "Disney+", "amountUsd": 15.99, "cadence": "MONTHLY" },
+        { "id": "cms0rec002", "label": "Netflix", "amountUsd": 22.99, "cadence": "MONTHLY" }
+      ]
+    }
+  ],
+  "homes": [
+    {
+      "homeId": "cms0abc123",
+      "homeName": "Main House",
+      "maintenanceUsd": 260,
+      "projectsUsd": 0,
+      "otherUsd": 180,
+      "totalUsd": 440,
+      "monthlyBudgetUsd": 500,
+      "varianceUsd": -60,
+      "recommendedReserveUsd": 15.15
+    }
+  ],
+  "incomeCategories": 1
+}
+```
+
+Notes:
+
+- **Every figure is monthly, and recurring charges are smoothed.** A $2,160
+  annual insurance premium reports as `$180` in all twelve months, not `$2,160`
+  in one. This answers "what does the household need per month?" rather than
+  "what leaves the account in June?" — say so if a caller asks why a month
+  doesn't match their statement.
+- `committedUsd` is the recurring charges that ran that month; `loggedUsd` is
+  what someone entered by hand. `actualUsd` is the two together. A recurring
+  charge needs no monthly confirmation — it counts because it happened.
+- `monthlyTargetUsd` is `null` when the category is tracked without a target,
+  and `varianceUsd` is `null` with it. Don't report a category as over or under
+  budget when it has no budget.
+- `varianceUsd` is positive when **over** plan for an expense.
+- `categories` contains household-wide categories only. Anything bound to a
+  house (its insurance, its mortgage) is folded into that home's `otherUsd`
+  instead, so nothing is counted twice.
+- Houses are never re-entered into the budget: `maintenanceUsd` comes from the
+  maintenance log and `projectsUsd` from projects finished that month.
+- `recommendedReserveUsd` (and `totals.homeReserveUsd`) is what the appliances
+  and systems accrue monthly toward eventual replacement. It is **saving, not
+  spending**, and is deliberately excluded from `expenseUsd`. Don't add it to
+  the expense total.
+- **Categories can be withheld from this surface entirely.** Each one carries
+  an "Alfred and Lucy can read it" switch, set by a household admin. A category
+  with it off is absent from `categories`, its recurring charges are absent,
+  and everything logged against it is excluded from every total — including
+  `incomeUsd`. This is separate from who in the family can see a category: the
+  household may well let the assistant answer "when is the mortgage due" while
+  keeping the mortgage hidden from the kids, or the reverse.
+- `withheldCategories` counts how many are held back. **When it is non-zero the
+  totals are partial** — say so rather than reporting them as the household's
+  whole financial picture. A withheld income category makes `incomeUsd` read
+  `0`, which is not the same as earning nothing.
+- Read-only. There is no budget write endpoint.
+
+---
+
+## 10. `GET /api/alfred/tasks`
 
 Routine (recurring) maintenance jobs and when they are next due.
 
@@ -368,7 +514,7 @@ Notes:
 
 ---
 
-## 10. `POST /api/alfred/tasks/complete` — the only write
+## 11. `POST /api/alfred/tasks/complete` — the only write
 
 **Two round trips, always.** Step 1 changes nothing; it exists so the user hears
 what will happen before it happens. The endpoint dispatches on which body shape
@@ -472,7 +618,11 @@ one transaction.
 
 ---
 
-## 11. Enum reference
+## 12. Enum reference
+
+**`kind`** (budget category) — `INCOME`, `EXPENSE`
+
+**`cadence`** (recurring charge) — `WEEKLY`, `MONTHLY`, `QUARTERLY`, `ANNUAL`
 
 **`type`** (home) — `PRIMARY_RESIDENCE`, `RENTAL`
 
@@ -496,7 +646,7 @@ one transaction.
 
 ---
 
-## 12. Worked examples
+## 13. Worked examples
 
 ```bash
 TOKEN='your-alfred-token'
@@ -516,6 +666,12 @@ curl -s -H "X-Alfred-Token: $TOKEN" \
 # What's coming due everywhere
 curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/forecast"
 
+# This month's budget
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/budget"
+
+# A specific month
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/budget?month=2026-08"
+
 # What routine work is due
 curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/tasks"
 
@@ -532,7 +688,7 @@ curl -s -X POST -H "X-Alfred-Token: $TOKEN" -H "Content-Type: application/json" 
 
 ---
 
-## 13. Not implemented
+## 14. Not implemented
 
 These do not exist. Calling them returns `404` or `405`.
 
@@ -543,6 +699,13 @@ These do not exist. Calling them returns `404` or `405`.
 - **No general maintenance write.** There is no way to add or edit an arbitrary
   maintenance entry. The only write is completing an existing routine task.
 - **No appliance, home, task, or document creation or editing.**
+- **No budget write.** `/api/alfred/budget` is read-only: nothing can log
+  spending, add a category, or change a recurring charge through this surface.
+- **No way to reach a withheld category.** There is no parameter, override, or
+  id lookup that returns a category whose assistant switch is off. The same
+  reasoning as documents applies: this surface holds a shared token and has no
+  user identity behind it, so anything the household marks private to itself
+  stays out of reach.
 - **No delete of anything.**
 
 There is no `taskId` filter on `/api/alfred/maintenance`; entries carry `task`,

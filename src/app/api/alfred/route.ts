@@ -47,11 +47,23 @@ export async function GET(request: Request) {
       {
         path: "/api/alfred/forecast",
         description:
-          "Appliances flagged against typical service life, most urgent first.",
+          "Appliances flagged against expected service life, most urgent first, " +
+          "plus planned projects and a combined cost total.",
         params: {
           home: "home id or name (optional)",
           includeOk:
             "'1' to include items that are not yet near replacement (optional)",
+        },
+      },
+      {
+        path: "/api/alfred/budget",
+        description:
+          "The household budget for a month: income, expense categories with " +
+          "their recurring charges, and what each house cost. Every figure is " +
+          "monthly; recurring charges are smoothed rather than billed-in-month.",
+        params: {
+          month: "YYYY-MM (optional, defaults to the current month)",
+          home: "home id or name (optional; restricts the homes section)",
         },
       },
       {

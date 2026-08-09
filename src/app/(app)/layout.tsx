@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOutAction } from "@/app/actions/auth";
 import { requireUser } from "@/lib/access";
+import { budgetAccessFor } from "@/lib/budget-access";
 import { Wordmark } from "@/components/Wordmark";
 import { TabBar } from "@/components/TabBar";
 import { IconSignOut } from "@/components/icons";
@@ -15,8 +16,15 @@ export default async function AppLayout({
   const tabs = [
     { href: "/homes", label: "Homes", icon: "home" as const },
     { href: "/forecast", label: "Forecast", icon: "forecast" as const },
+    // Hidden entirely when someone has no budget access: an empty tab telling
+    // them there's money they can't see is worse than no tab.
+    ...(budgetAccessFor(user).canView
+      ? [{ href: "/budget", label: "Budget", icon: "budget" as const }]
+      : []),
+    // "People" rather than "Household": with a household budget in the nav,
+    // "Household" no longer reads as the page about who has access.
     ...(user.systemRole === "OWNER"
-      ? [{ href: "/household", label: "Household", icon: "household" as const }]
+      ? [{ href: "/household", label: "People", icon: "household" as const }]
       : []),
     { href: "/account", label: "Account", icon: "account" as const },
   ];
