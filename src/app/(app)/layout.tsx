@@ -15,8 +15,11 @@ export default async function AppLayout({
   const tabs = [
     { href: "/homes", label: "Homes", icon: "home" as const },
     { href: "/forecast", label: "Forecast", icon: "forecast" as const },
+    { href: "/budget", label: "Budget", icon: "budget" as const },
+    // "People" rather than "Household": with a household budget in the nav,
+    // "Household" no longer reads as the page about who has access.
     ...(user.systemRole === "OWNER"
-      ? [{ href: "/household", label: "Household", icon: "household" as const }]
+      ? [{ href: "/household", label: "People", icon: "household" as const }]
       : []),
     { href: "/account", label: "Account", icon: "account" as const },
   ];

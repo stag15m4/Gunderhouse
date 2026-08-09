@@ -4,6 +4,15 @@ import { canAdminister, canEdit, requireHome } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { buildForecast, upcomingOnly } from "@/lib/forecast";
 import { sortProjects } from "@/lib/projects";
+import {
+  buildCategoryLine,
+  buildHomeMonth,
+  monthEnd,
+  monthLabel,
+  monthStart,
+  projectsCompletedIn,
+} from "@/lib/budget";
+import { setHomeBudget } from "@/app/actions/budget";
 import { createProject } from "@/app/actions/projects";
 import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatAddress, formatDate, formatMoney } from "@/lib/format";
@@ -15,6 +24,7 @@ import {
 import {
   Badge,
   Empty,
+  Field,
   ForecastBadge,
   PageHeader,
   Section,
@@ -28,8 +38,16 @@ export default async function HomeOverviewPage({
   const { homeId } = await params;
   const { home, role } = await requireHome(homeId);
 
-  const [appliances, recentMaintenance, spend, documentCount, projectRows] =
-    await Promise.all([
+  const thisMonth = { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
+  const [
+    appliances,
+    recentMaintenance,
+    spend,
+    documentCount,
+    projectRows,
+    doneProjects,
+    homeCategories,
+  ] = await Promise.all([
     prisma.appliance.findMany({
       where: { homeId },
       select: {
@@ -62,10 +80,31 @@ export default async function HomeOverviewPage({
     prisma.project.findMany({
       where: { homeId, status: ProjectStatus.PLANNED },
     }),
+    prisma.project.findMany({
+      where: { homeId, status: ProjectStatus.DONE },
+    }),
+    prisma.budgetCategory.findMany({
+      where: { homeId, archived: false },
+      include: { recurring: true },
+    }),
   ]);
 
   const upcoming = upcomingOnly(buildForecast(appliances)).slice(0, 5);
   const projects = sortProjects(projectRows);
+
+  const monthMaintenance = await prisma.maintenanceEntry.findMany({
+    where: {
+      homeId,
+      performedOn: { gte: monthStart(thisMonth), lt: monthEnd(thisMonth) },
+    },
+  });
+  const homeMonth = buildHomeMonth({
+    home,
+    maintenance: monthMaintenance,
+    projects: projectsCompletedIn(doneProjects, thisMonth),
+    categoryLines: homeCategories.map((c) => buildCategoryLine(c, [], thisMonth)),
+    appliances,
+  });
   const editable = canEdit(role);
   const address = formatAddress(home);
 
@@ -172,6 +211,70 @@ export default async function HomeOverviewPage({
           homes={editable ? [{ id: homeId, name: home.name }] : []}
           returnTo={`/homes/${homeId}`}
         />
+      </Section>
+
+      <Section
+        title="Monthly cost"
+        description={`What this house is costing in ${monthLabel(thisMonth)}, and what it should be putting aside.`}
+        actions={
+          <Link
+            className="text-sm text-[var(--muted)] hover:text-[var(--text)]"
+            href="/budget"
+          >
+            Full budget →
+          </Link>
+        }
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="This month" value={formatMoney(homeMonth.totalCents)} />
+          <Stat
+            label="Monthly budget"
+            value={
+              homeMonth.budgetCents === null
+                ? "—"
+                : formatMoney(homeMonth.budgetCents)
+            }
+          />
+          <Stat
+            label="Difference"
+            value={
+              homeMonth.varianceCents === null
+                ? "—"
+                : formatMoney(homeMonth.varianceCents)
+            }
+          />
+          <Stat
+            label="Set aside / mo"
+            value={formatMoney(homeMonth.reserveCents)}
+          />
+        </div>
+        <p className="mt-3 text-xs text-[var(--subtle)]">
+          The set-aside is what the appliances and systems here accrue each
+          month against eventual replacement — {formatMoney(homeMonth.reserveCents * 12)} a
+          year. Saving, not spending.
+        </p>
+        {canAdminister(role) ? (
+          <form
+            action={setHomeBudget.bind(null, homeId)}
+            className="mt-4 flex items-end gap-3 border-t border-[var(--border-soft)] pt-4"
+          >
+            <div className="w-48">
+              <Field
+                label="Monthly budget"
+                name="monthlyBudget"
+                defaultValue={
+                  home.monthlyBudgetCents !== null
+                    ? (home.monthlyBudgetCents / 100).toFixed(2)
+                    : ""
+                }
+                hint="Blank to track without a target."
+              />
+            </div>
+            <button className="btn-secondary" type="submit">
+              Save
+            </button>
+          </form>
+        ) : null}
       </Section>
 
       <Section

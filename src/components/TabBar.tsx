@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   IconAccount,
+  IconBudget,
   IconForecast,
   IconHome,
   IconHousehold,
@@ -12,6 +13,7 @@ import {
 const ICONS = {
   home: IconHome,
   forecast: IconForecast,
+  budget: IconBudget,
   household: IconHousehold,
   account: IconAccount,
 } as const;

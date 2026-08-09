@@ -56,6 +56,17 @@ export async function GET(request: Request) {
         },
       },
       {
+        path: "/api/alfred/budget",
+        description:
+          "The household budget for a month: income, expense categories with " +
+          "their recurring charges, and what each house cost. Every figure is " +
+          "monthly; recurring charges are smoothed rather than billed-in-month.",
+        params: {
+          month: "YYYY-MM (optional, defaults to the current month)",
+          home: "home id or name (optional; restricts the homes section)",
+        },
+      },
+      {
         path: "/api/alfred/tasks",
         description:
           "Routine maintenance tasks and when they're next due, most urgent first.",

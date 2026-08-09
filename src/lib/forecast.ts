@@ -36,7 +36,7 @@ function yearsBetween(from: Date, to: Date): number {
   return (to.getTime() - from.getTime()) / MS_PER_YEAR;
 }
 
-type ForecastInput = Pick<
+export type ForecastInput = Pick<
   Appliance,
   | "id"
   | "homeId"

@@ -52,6 +52,7 @@ model User {
   passwordResets       PasswordReset[]    @relation("PasswordResetUser")
   passwordResetsIssued PasswordReset[]    @relation("PasswordResetIssuedBy")
   projectsCreated      Project[]          @relation("ProjectCreatedBy")
+  budgetEntries        BudgetEntry[]      @relation("BudgetEntryCreatedBy")
 }
 
 /// A single-use link letting someone set a new password. Issued by a household
@@ -138,6 +139,11 @@ model Home {
   purchasedOn DateTime?
   notes       String?
 
+  /// What you plan to spend on this house per month — upkeep and improvements.
+  /// Optional; without it the budget reports what the house costs without
+  /// judging it against a target.
+  monthlyBudgetCents Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -148,6 +154,7 @@ model Home {
   projects    Project[]
   documents   Document[]
   invitations Invitation[]
+  budgetCategories BudgetCategory[]
 }
 
 // ---------------------------------------------------------------------------
@@ -409,4 +416,111 @@ model Document {
   uploadedBy User? @relation("DocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([homeId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Household budget
+//
+// Deliberately not a general-ledger accounting system. Two kinds of money are
+// tracked differently, because they behave differently:
+//
+//   - Recurring, known amounts (Disney+, insurance, the mortgage) are entered
+//     once as a RecurringItem and counted every month from then on. There is
+//     nothing to confirm each month; the charge happens whether or not anyone
+//     opens the app.
+//   - Variable amounts (groceries, a one-off repair, income received) are
+//     BudgetEntry rows. One row a month per category is enough — "groceries,
+//     $1,240, March" — and finer entry is allowed but never required. Budget
+//     tools die when they demand per-receipt bookkeeping.
+//
+// House upkeep is not re-entered here at all. Maintenance entries and finished
+// projects already carry costs, so the budget reads them where they are.
+// ---------------------------------------------------------------------------
+
+enum BudgetKind {
+  INCOME
+  EXPENSE
+}
+
+enum Cadence {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+/// A line in the budget: "Groceries", "Subscriptions", "Angela's salary".
+model BudgetCategory {
+  id   String     @id @default(cuid())
+  name String
+  kind BudgetKind @default(EXPENSE)
+
+  /// What you plan for this category each month. Null means "track it, don't
+  /// judge it" — useful for categories that are purely their recurring items.
+  monthlyTargetCents Int?
+
+  /// Set when the category belongs to one house — its mortgage, its insurance.
+  /// Null for anything household-wide: groceries, streaming, income.
+  homeId String?
+
+  sortOrder Int     @default(0)
+  /// Archived categories keep their history but stop appearing in new months.
+  archived  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  home      Home?           @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  recurring RecurringItem[]
+  entries   BudgetEntry[]
+
+  @@index([archived, sortOrder])
+  @@index([homeId])
+}
+
+/// A charge that repeats on its own: a subscription, a premium, a payment.
+model RecurringItem {
+  id         String @id @default(cuid())
+  categoryId String
+
+  label       String
+  amountCents Int
+  cadence     Cadence @default(MONTHLY)
+
+  /// Bounds, for things that haven't started yet or have ended. A month outside
+  /// this window doesn't count the item.
+  startsOn DateTime?
+  endsOn   DateTime?
+  active   Boolean   @default(true)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId, active])
+}
+
+/// Money that actually moved: groceries bought, a paycheque received.
+model BudgetEntry {
+  id         String @id @default(cuid())
+  categoryId String
+
+  occurredOn  DateTime
+  amountCents Int
+  description String?
+
+  createdById String?
+  source      LogSource @default(APP)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category  BudgetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdBy User?          @relation("BudgetEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([categoryId, occurredOn])
+  @@index([occurredOn])
 }
