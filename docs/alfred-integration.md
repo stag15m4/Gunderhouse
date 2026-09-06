@@ -1,6 +1,6 @@
 # Gunderhouse — `/api/alfred/*` integration contract
 
-Complete external-caller reference. Accurate as of August 2026, including the household budget.
+Complete external-caller reference. Accurate as of September 2026, including property value and equity.
 
 Gunderhouse exposes read endpoints for homes, appliances, maintenance history,
 replacement forecasting, and routine tasks, plus exactly one write: completing a
@@ -468,7 +468,86 @@ Notes:
 
 ---
 
-## 10. `GET /api/alfred/tasks`
+## 10. `GET /api/alfred/property`
+
+What each property is worth, what's owed against it, and — for rentals — what
+the place has to earn to cover itself.
+
+**Query params:** `home` — home id or name. Optional.
+
+```json
+{
+  "generatedAt": "2026-09-06T23:40:00.000Z",
+  "basis": "Equity rests on the most recent valuation; when 'unvalued' is true there isn't one and the figures are meaningless rather than zero. 'availableTodayUsd' is undrawn credit, spendable now. 'borrowingHeadroomUsd' needs a new loan. They are different kinds of money and must not be added together.",
+  "properties": [
+    {
+      "homeId": "cms0abc123",
+      "homeName": "Oak Street Rental",
+      "type": "RENTAL",
+      "value": {
+        "currentUsd": 260000,
+        "valuedOn": "2026-09-06",
+        "source": "BROKER_OPINION",
+        "unvalued": false
+      },
+      "owedUsd": 150000,
+      "grossEquityUsd": 110000,
+      "ltvPercent": 57.69,
+      "availableTodayUsd": 0,
+      "borrowingHeadroomUsd": 58000,
+      "liens": [
+        {
+          "type": "FIRST_MORTGAGE",
+          "lender": "Regions Bank",
+          "balanceUsd": 150000,
+          "monthlyPaymentUsd": 1100,
+          "source": "MANUAL"
+        }
+      ],
+      "rental": {
+        "monthlyRentUsd": 1500,
+        "breakEvenRentUsd": 1294.12,
+        "monthlyCashFlowUsd": 175,
+        "fixedCostsUsd": 1100,
+        "costBreakdown": {
+          "debtServiceUsd": 1100,
+          "carryingUsd": 0,
+          "reserveUsd": 15.15,
+          "upkeepRunRateUsd": 0
+        },
+        "vacancyPercent": 5,
+        "managementPercent": 10
+      }
+    }
+  ]
+}
+```
+
+Notes:
+
+- **`availableTodayUsd` and `borrowingHeadroomUsd` must never be added.** The
+  first is undrawn credit, spendable now. The second needs a new loan, and a
+  drawn balance already counts against it — summing double-counts the same
+  collateral.
+- When `value.unvalued` is `true`, nothing has been valued: the equity figures
+  are `null` or `0` because they're **unknown**, not because there's no equity.
+  Say "it hasn't been valued".
+- **`rental` is `null` for anything that isn't a rental.** Don't quote a
+  break-even rent for the house someone lives in.
+- `breakEvenRentUsd` is solved, not summed: vacancy and management come off the
+  top, so it exceeds `fixedCostsUsd`. Charging exactly the fixed costs loses
+  money, which is the point of reporting it.
+- Carrying costs come from budget categories bound to that house, and honour
+  the same assistant switch as `/api/alfred/budget` — a category held back from
+  the assistant is excluded here too, so `carryingUsd` can understate.
+- Liens filed through the Legal app carry `"source": "LEGAL"`. Read-only here
+  and in the app; they're maintained in Legal.
+- Read-only. Property writes live on the Legal surface, which uses a different
+  token — see `docs/legal-integration.md`.
+
+---
+
+## 11. `GET /api/alfred/tasks`
 
 Routine (recurring) maintenance jobs and when they are next due.
 
@@ -514,7 +593,7 @@ Notes:
 
 ---
 
-## 11. `POST /api/alfred/tasks/complete` — the only write
+## 12. `POST /api/alfred/tasks/complete` — the only write
 
 **Two round trips, always.** Step 1 changes nothing; it exists so the user hears
 what will happen before it happens. The endpoint dispatches on which body shape
@@ -618,11 +697,17 @@ one transaction.
 
 ---
 
-## 12. Enum reference
+## 13. Enum reference
 
 **`kind`** (budget category) — `INCOME`, `EXPENSE`
 
 **`cadence`** (recurring charge) — `WEEKLY`, `MONTHLY`, `QUARTERLY`, `ANNUAL`
+
+**`type`** (lien) — `FIRST_MORTGAGE`, `SECOND_MORTGAGE`, `HELOC`,
+`HOME_EQUITY_LOAN`, `TAX_LIEN`, `MECHANICS_LIEN`, `JUDGMENT`, `OTHER`
+
+**`source`** (valuation) — `APPRAISAL`, `BROKER_OPINION`, `TAX_ASSESSMENT`,
+`ONLINE_ESTIMATE`, `PURCHASE_PRICE`, `OWNER_ESTIMATE`
 
 **`type`** (home) — `PRIMARY_RESIDENCE`, `RENTAL`
 
@@ -646,7 +731,7 @@ one transaction.
 
 ---
 
-## 13. Worked examples
+## 14. Worked examples
 
 ```bash
 TOKEN='your-alfred-token'
@@ -665,6 +750,9 @@ curl -s -H "X-Alfred-Token: $TOKEN" \
 
 # What's coming due everywhere
 curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/forecast"
+
+# What the properties are worth and owe
+curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/property"
 
 # This month's budget
 curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/budget"
@@ -688,7 +776,7 @@ curl -s -X POST -H "X-Alfred-Token: $TOKEN" -H "Content-Type: application/json" 
 
 ---
 
-## 14. Not implemented
+## 15. Not implemented
 
 These do not exist. Calling them returns `404` or `405`.
 
@@ -706,6 +794,9 @@ These do not exist. Calling them returns `404` or `405`.
   reasoning as documents applies: this surface holds a shared token and has no
   user identity behind it, so anything the household marks private to itself
   stays out of reach.
+- **No property, valuation, or lien write.** `/api/alfred/property` is
+  read-only. Liens are maintained by the Legal app through `/api/legal/*`,
+  which uses its own token — an Alfred token gets `401` there.
 - **No delete of anything.**
 
 There is no `taskId` filter on `/api/alfred/maintenance`; entries carry `task`,

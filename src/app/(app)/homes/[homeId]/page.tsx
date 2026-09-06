@@ -14,6 +14,7 @@ import {
 } from "@/lib/budget";
 import { setHomeBudget } from "@/app/actions/budget";
 import { budgetAccessFor, visibleCategoryWhere } from "@/lib/budget-access";
+import { buildEquity, formatBps } from "@/lib/equity";
 import { createProject } from "@/app/actions/projects";
 import { AddProjectForm, ProjectList } from "@/components/ProjectList";
 import { formatAddress, formatDate, formatMoney } from "@/lib/format";
@@ -49,6 +50,8 @@ export default async function HomeOverviewPage({
     projectRows,
     doneProjects,
     homeCategories,
+    valuations,
+    liens,
   ] = await Promise.all([
     prisma.appliance.findMany({
       where: { homeId },
@@ -91,6 +94,8 @@ export default async function HomeOverviewPage({
       where: { homeId, archived: false, ...visibleCategoryWhere(user) },
       include: { recurring: true },
     }),
+    prisma.valuation.findMany({ where: { homeId } }),
+    prisma.lien.findMany({ where: { homeId } }),
   ]);
 
   const upcoming = upcomingOnly(buildForecast(appliances)).slice(0, 5);
@@ -110,6 +115,7 @@ export default async function HomeOverviewPage({
     appliances,
   });
   const editable = canEdit(role);
+  const equity = buildEquity({ home, valuations, liens });
   const address = formatAddress(home);
 
   return (
@@ -281,6 +287,31 @@ export default async function HomeOverviewPage({
           </form>
         ) : null}
       </Section>
+      ) : null}
+
+      {budget.canView && !equity.unvalued ? (
+        <Section
+          title="Value & financing"
+          description={`Loan to value ${equity.ltvBps === null ? "—" : formatBps(equity.ltvBps)}.`}
+          actions={
+            <Link
+              className="text-sm text-[var(--muted)] hover:text-[var(--text)]"
+              href={`/homes/${homeId}/finance`}
+            >
+              Details →
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Value" value={formatMoney(equity.valueCents)} />
+            <Stat label="Owed" value={formatMoney(equity.totalOwedCents)} />
+            <Stat label="Equity" value={formatMoney(equity.grossEquityCents)} />
+            <Stat
+              label="Available now"
+              value={formatMoney(equity.undrawnCreditCents)}
+            />
+          </div>
+        </Section>
       ) : null}
 
       <Section
