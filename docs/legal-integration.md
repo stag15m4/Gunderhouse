@@ -22,7 +22,7 @@ this surface.
 ## 2. Base URL and authentication
 
 ```
-https://<your-gunderhouse-host>/api/legal
+https://gunderhouse.sethgundersen.com/api/legal
 ```
 
 Every request needs a shared secret in a header:
@@ -242,7 +242,7 @@ credit limit below the drawn balance is rejected.
 ## 8. Worked examples
 
 ```bash
-BASE=https://gunderhouse.up.railway.app/api/legal
+BASE=https://gunderhouse.sethgundersen.com/api/legal
 TOKEN=$LEGAL_TOKEN
 
 # Map matters to properties

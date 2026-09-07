@@ -11,7 +11,7 @@ routine task, behind a two-step confirmation.
 ## 1. Base URL
 
 ```
-https://<your-gunderhouse-domain>
+https://gunderhouse.sethgundersen.com
 ```
 
 All paths below are relative to that origin.
@@ -735,7 +735,7 @@ one transaction.
 
 ```bash
 TOKEN='your-alfred-token'
-BASE='https://your-gunderhouse-domain'
+BASE='https://gunderhouse.sethgundersen.com'
 
 # All homes
 curl -s -H "X-Alfred-Token: $TOKEN" "$BASE/api/alfred/homes"
