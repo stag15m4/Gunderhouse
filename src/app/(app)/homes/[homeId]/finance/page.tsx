@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   HomeType,
@@ -20,10 +21,8 @@ import { buildRent, maintenanceRunRate, rentForCashFlow } from "@/lib/rental";
 import { buildCategoryLine, monthlyReserveCents } from "@/lib/budget";
 import {
   addValuation,
-  closeLien,
   createLien,
   deleteValuation,
-  reopenLien,
   setLendingAssumption,
   setRentalTerms,
 } from "@/app/actions/property";
@@ -200,9 +199,21 @@ export default async function HomeFinancePage({
                   <tr key={lien.id} className={isOpen(lien) ? "" : "opacity-50"}>
                     <td>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-[var(--text)]">
-                          {lien.lender}
-                        </span>
+                        {/* The lender name is the way in to editing — a
+                            balance changes every month, so this needs to be
+                            the obvious click, not a secondary control. */}
+                        {editable && lien.source === LienSource.MANUAL ? (
+                          <Link
+                            className="font-medium text-[var(--text)] hover:underline"
+                            href={`/homes/${homeId}/liens/${lien.id}`}
+                          >
+                            {lien.lender}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-[var(--text)]">
+                            {lien.lender}
+                          </span>
+                        )}
                         {lien.source === LienSource.LEGAL ? (
                           <Badge tone="neutral">From Legal</Badge>
                         ) : null}
@@ -238,20 +249,12 @@ export default async function HomeFinancePage({
                     </td>
                     <td className="text-right">
                       {editable && lien.source === LienSource.MANUAL ? (
-                        <form
-                          action={
-                            isOpen(lien)
-                              ? closeLien.bind(null, homeId, lien.id)
-                              : reopenLien.bind(null, homeId, lien.id)
-                          }
+                        <Link
+                          className="text-xs text-[var(--subtle)] hover:text-[var(--text)]"
+                          href={`/homes/${homeId}/liens/${lien.id}`}
                         >
-                          <button
-                            className="text-xs text-[var(--subtle)] hover:text-[var(--text)]"
-                            type="submit"
-                          >
-                            {isOpen(lien) ? "Mark paid off" : "Reopen"}
-                          </button>
-                        </form>
+                          Edit
+                        </Link>
                       ) : null}
                     </td>
                   </tr>

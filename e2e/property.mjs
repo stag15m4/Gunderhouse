@@ -145,21 +145,83 @@ check(
   has(await page.innerText("main"), "can't be less than the balance drawn"),
 );
 
-// paying one off removes it from the equity maths
-const helocId = sql(`select id from "Lien" where lender='Local Credit Union'`);
+// ---- editing a lien --------------------------------------------------------
+// A mortgage balance changes every month, so this is the most-used path here.
+const mortgageId = sql(
+  `select id from "Lien" where lender='Regions Bank' and "homeId"='${houseId}'`,
+);
 await page.goto(fin(houseId));
-await clickAndSettle(
-  page,
-  `tr:has-text("Local Credit Union") form button`,
+await clickAndSettle(page, `a[href="/homes/${houseId}/liens/${mortgageId}"]`);
+check(
+  "the lender name opens the lien",
+  page.url().endsWith(`/liens/${mortgageId}`),
+  page.url(),
 );
 text = await page.innerText("main");
+check("the form is prefilled", has(text, "Regions Bank"));
+
+await page.fill('input[name="currentBalance"]', "181500");
+await page.fill('input[name="balanceAsOf"]', today);
+await page.fill('input[name="interestRate"]', "6.125");
+await clickAndSettle(page, 'form:has(input[name="currentBalance"]) button[type="submit"]');
+check(
+  "saving returns to the finance page",
+  page.url().endsWith("/finance"),
+  page.url(),
+);
+text = await page.innerText("main");
+check("the new balance shows", has(text, "$181,500.00"));
+check("the rate is updated", has(text, "6.13%"));
+check(
+  "and equity recalculates",
+  has(text, "$208,500.00"),
+  "410000 - (181500 + the 20000 HELOC still open)",
+);
+check(
+  "stored in cents",
+  sql(`select "currentBalanceCents" from "Lien" where id='${mortgageId}'`) === "18150000",
+);
+
+// a negative balance is refused
+await page.goto(`${BASE}/homes/${houseId}/liens/${mortgageId}`);
+await page.fill('input[name="currentBalance"]', "-5");
+await clickAndSettle(page, 'form:has(input[name="currentBalance"]) button[type="submit"]');
+check(
+  "a negative balance is refused",
+  has(await page.innerText("main"), "can't be negative"),
+);
+check(
+  "and nothing changed",
+  sql(`select "currentBalanceCents" from "Lien" where id='${mortgageId}'`) === "18150000",
+);
+
+// paying one off removes it from the equity maths
+const helocId = sql(`select id from "Lien" where lender='Local Credit Union'`);
+await page.goto(`${BASE}/homes/${houseId}/liens/${helocId}`);
+await clickAndSettle(page, 'form:has(input[name="closedOn"]) button[type="submit"]');
+text = await page.innerText("main");
 check("a paid-off lien is marked closed", has(text, "Closed"));
-check("and stops counting against equity", has(text, "$226,000.00"));
+check("and stops counting against equity", has(text, "$228,500.00"));
 check("and its undrawn credit goes with it", !has(text, "$80,000.00"));
 check(
   "its balance is zeroed",
   sql(`select "currentBalanceCents" from "Lien" where id='${helocId}'`) === "0",
 );
+
+// and it can come back
+await page.goto(`${BASE}/homes/${houseId}/liens/${helocId}`);
+check(
+  "a closed lien says so",
+  has(await page.innerText("main"), "no longer counts against"),
+);
+await clickAndSettle(page, 'form:has(button:text("Reopen it")) button');
+check(
+  "reopening puts it back",
+  sql(`select coalesce("closedOn"::text,'null') from "Lien" where id='${helocId}'`) === "null",
+);
+// close it again so the later equity figures hold
+await page.goto(`${BASE}/homes/${houseId}/liens/${helocId}`);
+await clickAndSettle(page, 'form:has(input[name="closedOn"]) button[type="submit"]');
 
 // ---- Rental Mode ------------------------------------------------------------
 await page.goto(fin(houseId));
@@ -242,7 +304,11 @@ const props = await (
 check("legal can list properties", props.properties.length === 2);
 const mainProp = props.properties.find((p) => p.name === "Main House");
 check("with a current value", mainProp?.currentValueUsd === 410000);
-check("and the equity already computed", mainProp?.grossEquityUsd === 226000);
+check(
+  "and the equity already computed",
+  mainProp?.grossEquityUsd === 228500,
+  String(mainProp?.grossEquityUsd),
+);
 
 const noTok = await api.request.get(`${BASE}/api/legal/properties`);
 check("the legal token is enforced", noTok.status() === 401, String(noTok.status()));
@@ -285,7 +351,7 @@ check("legal can push liens", put1.status() === 200, String(put1.status()));
 check("both landed", synced.synced === 2, String(synced.synced));
 check(
   "and the equity comes back with the response",
-  synced.equity.totalOwedUsd === 234000,
+  synced.equity.totalOwedUsd === 231500,
   String(synced.equity.totalOwedUsd),
 );
 check(
@@ -293,8 +359,8 @@ check(
   (await (async () => {
     await page.goto(fin(houseId));
     return page.innerText("main");
-  })()).includes("$176,000.00"),
-  "410000 - 234000",
+  })()).includes("$178,500.00"),
+  "410000 - 231500",
 );
 
 text = await page.innerText("main");
@@ -306,6 +372,18 @@ check(
 check(
   "they are marked as owned by Legal in the database",
   sql(`select source from "Lien" where "externalId"='matter-001'`) === "LEGAL",
+);
+
+// reaching a Legal lien's page directly gives a read-only view, not a form
+const legalLienId = sql(`select id from "Lien" where "externalId"='matter-001'`);
+await page.goto(`${BASE}/homes/${houseId}/liens/${legalLienId}`);
+const legalPage = await page.innerText("main");
+check("a Legal lien opens read-only", has(legalPage, "synced from the Legal app"));
+check("with no save button", !has(legalPage, "Save changes"));
+check("no delete", !has(legalPage, "Delete this lien"));
+check(
+  "and no way to close it here",
+  !has(legalPage, "Mark paid off"),
 );
 
 // re-sending is idempotent and reconciles removals
@@ -412,7 +490,7 @@ const prop = await (
 const rental = prop.properties.find((p) => p.homeName === "Oak Street Rental");
 const main = prop.properties.find((p) => p.homeName === "Main House");
 check("alfred sees property value", main?.value.currentUsd === 410000);
-check("and equity", main?.grossEquityUsd === 226000, String(main?.grossEquityUsd));
+check("and equity", main?.grossEquityUsd === 228500, String(main?.grossEquityUsd));
 check("a rental reports its break-even", rental?.rental?.breakEvenRentUsd !== null);
 check("a non-rental reports no rent maths", main?.rental === null);
 check(
@@ -477,8 +555,8 @@ check(
 );
 const avaText = await avaPage.innerText("main");
 // By now the Legal sync has released everything it owned, so the only open
-// lien is the hand-entered first mortgage: 410,000 - 184,000.
-check("she can read the equity", has(avaText, "$226,000.00"));
+// lien is the hand-entered first mortgage, edited earlier to 181,500.
+check("she can read the equity", has(avaText, "$228,500.00"));
 check("but gets no add-lien form", !has(avaText, "Add a loan or lien"));
 check("nor a way to record a value", !has(avaText, "Record value"));
 check("nor the lending assumption", !has(avaText, "Lending assumption"));
