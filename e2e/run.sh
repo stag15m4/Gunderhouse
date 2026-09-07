@@ -18,6 +18,14 @@ if [ -n "${E2E_PLAYWRIGHT_DIR:-}" ]; then
   done
 fi
 
+# Fail loudly if the database isn't up. Without this the suite gets as far as
+# a blank page and dies on a Playwright timeout, which points nowhere near the
+# actual problem.
+if ! pg_isready -h "$PGH" -p "$PGP" >/dev/null 2>&1; then
+  echo "postgres is not accepting connections on $PGH:$PGP — start it first." >&2
+  exit 1
+fi
+
 # Build once up front. `next start` serves the last build, so editing a page
 # and re-running without this silently tests the previous version — a mistake
 # that is very easy to make and very confusing to debug.
