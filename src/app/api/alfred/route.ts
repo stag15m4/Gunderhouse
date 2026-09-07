@@ -67,6 +67,14 @@ export async function GET(request: Request) {
         },
       },
       {
+        path: "/api/alfred/property",
+        description:
+          "What each property is worth, what's owed against it, the equity " +
+          "that leaves, and for rentals what the place has to earn to cover " +
+          "its costs.",
+        params: { home: "home id or name (optional)" },
+      },
+      {
         path: "/api/alfred/tasks",
         description:
           "Routine maintenance tasks and when they're next due, most urgent first.",

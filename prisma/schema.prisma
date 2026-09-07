@@ -71,6 +71,7 @@ model User {
   passwordResetsIssued PasswordReset[]    @relation("PasswordResetIssuedBy")
   projectsCreated      Project[]          @relation("ProjectCreatedBy")
   budgetEntries        BudgetEntry[]      @relation("BudgetEntryCreatedBy")
+  valuations           Valuation[]        @relation("ValuationCreatedBy")
 }
 
 /// A single-use link letting someone set a new password. Issued by a household
@@ -162,6 +163,20 @@ model Home {
   /// judging it against a target.
   monthlyBudgetCents Int?
 
+  // --- Rental terms. Only meaningful when type is RENTAL; see lib/rental.ts.
+  /// What it rents for, or what you're considering charging.
+  monthlyRentCents Int?
+  /// Share of the year assumed empty, in basis points. 500 = 5%. Vacancy and
+  /// management both scale with rent, which is why break-even rent is solved
+  /// for rather than added up.
+  vacancyRateBps   Int  @default(500)
+  /// Property-manager cut, in basis points. 0 when you manage it yourself.
+  managementFeeBps Int  @default(0)
+
+  /// The combined loan-to-value a lender is assumed to allow, in basis points.
+  /// 8000 = 80%, the usual ceiling. Drives "what could you still borrow".
+  maxCombinedLtvBps Int @default(8000)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -173,6 +188,8 @@ model Home {
   documents   Document[]
   invitations Invitation[]
   budgetCategories BudgetCategory[]
+  valuations  Valuation[]
+  liens       Lien[]
 }
 
 // ---------------------------------------------------------------------------
@@ -561,4 +578,114 @@ model BudgetEntry {
 
   @@index([categoryId, occurredOn])
   @@index([occurredOn])
+}
+
+// ---------------------------------------------------------------------------
+// What a property is worth, and what is owed against it
+//
+// Two halves of one number. Valuations are a history rather than a single
+// field: an appraisal, a tax assessment and a website estimate disagree, they
+// go stale, and being able to see which figure the equity math is standing on
+// matters more than storing one authoritative value that quietly ages.
+//
+// Liens may be owned by this app or synced from the Legal app, which is the
+// system of record for anything with a filing behind it. Synced ones carry
+// source LEGAL and are not editable here, so the two can't drift apart.
+// ---------------------------------------------------------------------------
+
+/// Where a value figure came from. Ordered loosely by how much weight it
+/// deserves; the UI shows the source next to the number so a Zillow guess is
+/// never mistaken for an appraisal.
+enum ValuationSource {
+  APPRAISAL
+  BROKER_OPINION
+  TAX_ASSESSMENT
+  ONLINE_ESTIMATE
+  PURCHASE_PRICE
+  OWNER_ESTIMATE
+}
+
+model Valuation {
+  id     String @id @default(cuid())
+  homeId String
+
+  valuedOn    DateTime
+  /// Cents, like every other amount here. Int caps at about $21.4M, which is
+  /// well clear of any house and keeps the value JSON-serialisable — BigInt
+  /// can't cross the server-component boundary.
+  amountCents Int
+  source      ValuationSource @default(OWNER_ESTIMATE)
+  notes       String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  home      Home  @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("ValuationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([homeId, valuedOn])
+}
+
+enum LienType {
+  FIRST_MORTGAGE
+  SECOND_MORTGAGE
+  HELOC
+  HOME_EQUITY_LOAN
+  TAX_LIEN
+  MECHANICS_LIEN
+  JUDGMENT
+  OTHER
+}
+
+/// Who owns this record. LEGAL rows are written by the Legal app and are
+/// read-only here — editing them in two places is how the two get out of step.
+enum LienSource {
+  MANUAL
+  LEGAL
+}
+
+model Lien {
+  id     String @id @default(cuid())
+  homeId String
+
+  type     LienType @default(FIRST_MORTGAGE)
+  lender   String
+  /// Lien position where it's known — 1 for a first, 2 for a second. Affects
+  /// who gets paid first, not the arithmetic here.
+  position Int?
+
+  originalAmountCents Int?
+  /// What's owed now. The figure equity is calculated from.
+  currentBalanceCents Int
+  /// When that balance was last true. A balance with no date behind it is a
+  /// guess, and amortising debt goes stale quickly.
+  balanceAsOf         DateTime?
+
+  /// For a line of credit: the ceiling. The undrawn part is money available
+  /// today without originating anything, which is a different kind of
+  /// availability from equity you'd have to borrow against.
+  creditLimitCents Int?
+
+  interestRateBps     Int?
+  monthlyPaymentCents Int?
+
+  openedOn  DateTime?
+  maturesOn DateTime?
+  /// Set when it's paid off or released. Closed liens stop counting.
+  closedOn  DateTime?
+
+  notes String?
+
+  source LienSource @default(MANUAL)
+  /// The Legal app's own id for this instrument, used to match on sync.
+  externalId        String?
+  externalUpdatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  home Home @relation(fields: [homeId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalId])
+  @@index([homeId, closedOn])
 }
