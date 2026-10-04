@@ -9,16 +9,16 @@ export default function manifest(): MetadataRoute.Manifest {
     display: "standalone",
     background_color: "#0a0a0a",
     theme_color: "#0a0a0a",
+    // These two are generated without the gold border and with the mark held
+    // inside the maskable safe zone, so Android's circle crop has nothing to
+    // shave. The bordered tile is the iOS touch icon instead.
+    // Listed twice rather than as the spec's space-separated "any maskable",
+    // which Next's Manifest type doesn't accept.
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      // Android crops to a circle; this one keeps the plate inside the safe zone.
-      {
-        src: "/icons/icon-maskable-512.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "maskable",
-      },
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

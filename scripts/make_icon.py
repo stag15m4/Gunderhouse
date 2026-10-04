@@ -1,219 +1,145 @@
 #!/usr/bin/env python3
 """
-Generate the Gundersen app-icon set: a near-black tile with a thin metallic
-gold border and the app's mark centred inside.
+Gundersen app-icon generator — the shared "gold-framed dark tile" style.
 
-The constants below are shared across every app in the suite — Alfred, CMS,
-Consultant, Legal, Laundroweb, Gunderhouse — and are what make the icons read
-as a matched set on a home screen. Do not tune them per app. The only knob
-meant to move is --coverage.
+Produces a consistent icon set (dark #0a0a0a tile + metallic gold border +
+centered mark) so every app on the home screen — Alfred, CMS, Consultant,
+Legal, Laundroweb — reads as one family.
 
-See docs/ICON_TEMPLATE.md.
-
+USAGE
     pip install Pillow numpy
-    python3 scripts/make_icon.py --art public/brand/mark.webp --out public/icons
+    python3 make_icon.py --art path/to/logo.png --out public/icons
+
+    # If your logo art has the mark sitting inside a larger image (wordmark,
+    # background, etc.), pass the pixel box of JUST the mark to isolate it:
+    python3 make_icon.py --art art.png --crop 219,169,706,459 --out public/icons
+
+OUTPUT (into --out, plus favicons into --out/..)
+    apple-touch-icon.png   180x180   (iOS home screen — the important one)
+    icon-192.png           192x192   (PWA / Android, maskable-safe center)
+    icon-512.png           512x512   (PWA / Android)
+    icon-tile-512.png      512x512   (bordered tile, for previews)
+    favicon.ico            16/32/48  (browser tab)
+    favicon-16.png / -32.png
+
+THE LOCKED BRAND CONSTANTS (do not change — this is what keeps them matched):
+    Background      #0a0a0a
+    Gold gradient   #F2DD92 (top) -> #C9A04C (mid) -> #865F22 (bottom)
+    Border weight   3.0% of icon side
+    Border inset    1.2% of icon side  (flush to edge, no dark gap)
+    Corner radius   22.5% of icon side (matches the iOS squircle)
+    Mark coverage   78% of icon width  (tune per art so it reads well)
+    Supersample     3x then downscale  (clean anti-aliased edges)
+
+Only --coverage should normally be adjusted per app, so a wide mark and a
+tall mark both look balanced. Everything else stays fixed.
 """
-
-from __future__ import annotations
-
 import argparse
-from pathlib import Path
+from PIL import Image, ImageDraw, ImageFilter, ImageChops
 
-from PIL import Image, ImageDraw
-
-# --- locked constants --------------------------------------------------------
-BG = (10, 10, 10, 255)  # #0a0a0a
-GOLD_STOPS = (
-    (0.0, (0xF2, 0xDD, 0x92)),
-    (0.5, (0xC9, 0xA0, 0x4C)),
-    (1.0, (0x86, 0x5F, 0x22)),
-)
-BORDER_WEIGHT = 0.030  # of icon side
-BORDER_INSET = 0.012  # of icon side, outer edge of the stroke
-CORNER_RADIUS = 0.225  # of icon side — matches the iOS squircle
-SUPERSAMPLE = 3  # render big, downscale once, for clean edges
+# ---- Locked brand constants -------------------------------------------------
+BG = (10, 10, 10)                       # #0a0a0a
+GOLD_TOP = (0xF2, 0xDD, 0x92)
+GOLD_MID = (0xC9, 0xA0, 0x4C)
+GOLD_BOT = (0x86, 0x5F, 0x22)
+BORDER_F = 0.030                        # line weight  (3.0%)
+INSET_F = 0.012                         # flush to edge (1.2%)
+RADIUS_F = 0.225                        # iOS squircle (22.5%)
+FEATHER_F = 0.053                       # mark edge feather, fraction of mark w
 
 
-def gold_gradient(size: int) -> Image.Image:
-    """Vertical three-stop metallic gold, top to bottom."""
-    grad = Image.new("RGB", (1, size))
-    px = grad.load()
-    for y in range(size):
-        t = y / max(1, size - 1)
-        for i in range(len(GOLD_STOPS) - 1):
-            t0, c0 = GOLD_STOPS[i]
-            t1, c1 = GOLD_STOPS[i + 1]
-            if t0 <= t <= t1:
-                k = (t - t0) / (t1 - t0)
-                px[0, y] = tuple(round(a + (b - a) * k) for a, b in zip(c0, c1))
-                break
-    return grad.resize((size, size), Image.NEAREST)
-
-
-def load_mark(path: Path, crop: str | None, alpha_floor: int = 0) -> Image.Image:
-    """The mark on transparency, trimmed to its own ink."""
-    mark = Image.open(path).convert("RGBA")
+def load_mark(art_path, crop):
+    """Return an RGBA mark, feathered so it melts onto the dark tile."""
+    im = Image.open(art_path).convert("RGB")
     if crop:
-        left, top, right, bottom = (int(v) for v in crop.split(","))
-        mark = mark.crop((left, top, right, bottom))
-
-    if alpha_floor > 0:
-        # Logo art often carries a wide, near-white glow at very low alpha.
-        # Invisible on a white page; on a near-black plate it reads as grey
-        # haze around the mark. Drop everything under the floor and rescale
-        # what remains, so genuine antialiased edges stay smooth instead of
-        # being cut to a hard line.
-        import numpy as np
-
-        arr = np.array(mark).astype(np.float32)
-        a = arr[:, :, 3]
-        a = np.clip((a - alpha_floor) / (255.0 - alpha_floor), 0.0, 1.0) * 255.0
-        arr[:, :, 3] = a
-        mark = Image.fromarray(arr.astype("uint8"), "RGBA")
-    # Trim to the real content so --coverage means the same thing regardless of
-    # how much empty canvas the source art happened to carry.
-    bbox = mark.getbbox()
-    if bbox:
-        mark = mark.crop(bbox)
+        l, t, r, b = crop
+        im = im.crop((l, t, r, b))
+    mark = im.convert("RGBA")
+    w, h = mark.size
+    f = max(4, int(w * FEATHER_F))
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rectangle([f, f, w - f, h - f], fill=255)
+    mark.putalpha(m.filter(ImageFilter.GaussianBlur(f / 2)))
     return mark
 
 
-def render_tile(mark: Image.Image, side: int, coverage: float) -> Image.Image:
-    """One tile at the given side length, rendered supersampled."""
-    s = side * SUPERSAMPLE
-    radius = CORNER_RADIUS * s
-    border_px = max(1, round(BORDER_WEIGHT * s))
-    inset = BORDER_INSET * s
-
-    tile = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-
-    # The plate.
-    plate_mask = Image.new("L", (s, s), 0)
-    ImageDraw.Draw(plate_mask).rounded_rectangle(
-        (0, 0, s - 1, s - 1), radius=radius, fill=255
-    )
-    tile.paste(Image.new("RGBA", (s, s), BG), (0, 0), plate_mask)
-
-    # The gold border, stroked just inside the plate edge. Drawn as an outline
-    # on its own mask so the gradient shows through only the stroke.
-    border_mask = Image.new("L", (s, s), 0)
-    ImageDraw.Draw(border_mask).rounded_rectangle(
-        (
-            inset + border_px / 2,
-            inset + border_px / 2,
-            s - 1 - inset - border_px / 2,
-            s - 1 - inset - border_px / 2,
-        ),
-        radius=max(1.0, radius - inset - border_px / 2),
-        outline=255,
-        width=border_px,
-    )
-    tile.paste(gold_gradient(s).convert("RGBA"), (0, 0), border_mask)
-
-    # The mark, scaled to `coverage` of the width and centred. Height is
-    # constrained too, so a tall mark can't overflow the frame.
-    max_w = coverage * s
-    max_h = coverage * s
-    scale = min(max_w / mark.width, max_h / mark.height)
-    art = mark.resize(
-        (max(1, round(mark.width * scale)), max(1, round(mark.height * scale))),
-        Image.LANCZOS,
-    )
-    tile.alpha_composite(art, ((s - art.width) // 2, (s - art.height) // 2))
-
-    return tile.resize((side, side), Image.LANCZOS)
+def gold_gradient(size):
+    g = Image.new("RGB", (size, size))
+    d = ImageDraw.Draw(g)
+    lerp = lambda a, b, t: tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    for y in range(size):
+        t = y / size
+        c = lerp(GOLD_TOP, GOLD_MID, t / 0.5) if t < 0.5 else lerp(GOLD_MID, GOLD_BOT, (t - 0.5) / 0.5)
+        d.line([(0, y), (size, y)], fill=c)
+    return g
 
 
-def flatten(img: Image.Image) -> Image.Image:
-    """Opaque on the plate colour — what iOS wants for a touch icon."""
-    base = Image.new("RGBA", img.size, BG)
-    base.alpha_composite(img)
-    return base.convert("RGB")
+def bordered(mark, side, coverage, border=True):
+    """Render the dark tile + centered mark (+ gold border) at `side` px."""
+    S = side * 3  # supersample
+    canvas = Image.new("RGBA", (S, S), BG + (255,))
+    mw, mh = mark.size
+    tw = int(S * coverage)
+    e = mark.resize((tw, max(1, int(mh * tw / mw))), Image.LANCZOS)
+    canvas.alpha_composite(e, ((S - e.width) // 2, (S - e.height) // 2))
+
+    if border:
+        inset = int(S * INSET_F)
+        bw = int(S * BORDER_F)
+        radius = int(S * RADIUS_F)
+        outer = Image.new("L", (S, S), 0)
+        ImageDraw.Draw(outer).rounded_rectangle(
+            [inset, inset, S - 1 - inset, S - 1 - inset], radius=radius, fill=255)
+        inner = Image.new("L", (S, S), 0)
+        ImageDraw.Draw(inner).rounded_rectangle(
+            [inset + bw, inset + bw, S - 1 - inset - bw, S - 1 - inset - bw],
+            radius=max(1, radius - bw), fill=255)
+        ring = ImageChops.subtract(outer, inner)
+        grad = gold_gradient(S).convert("RGBA")
+        grad.putalpha(ring)
+        glow = gold_gradient(S).convert("RGBA")
+        glow.putalpha(ring.filter(ImageFilter.GaussianBlur(S * 0.006)))
+        canvas.alpha_composite(glow)
+        canvas.alpha_composite(grad)
+
+    return canvas.resize((side, side), Image.LANCZOS)
 
 
-def render_maskable(mark: Image.Image, side: int, coverage: float) -> Image.Image:
-    """
-    Beyond the shared template, and deliberately so.
-
-    Android crops a maskable icon to a circle, which would cut the gold border
-    off entirely. This keeps the whole bordered plate inside the 80% safe zone
-    on a filled background, so the frame survives the crop.
-    """
-    inner = round(side * 0.80)
-    plate = render_tile(mark, inner, coverage)
-    out = Image.new("RGBA", (side, side), BG)
-    off = (side - inner) // 2
-    out.alpha_composite(plate, (off, off))
-    return out
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--art", required=True, help="PNG/WebP of the mark")
-    ap.add_argument("--out", required=True, help="output directory")
-    ap.add_argument(
-        "--crop",
-        help="L,T,R,B pixel box isolating just the mark in a larger image",
-    )
-    ap.add_argument(
-        "--alpha-floor",
-        type=int,
-        default=0,
-        help="drop source alpha below this (0-254) to kill a glow baked into "
-        "the art; 0 leaves the art untouched",
-    )
-    ap.add_argument(
-        "--coverage",
-        type=float,
-        default=0.78,
-        help="mark size as a fraction of icon width (the only knob to tune)",
-    )
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--art", required=True, help="Path to the app's logo/mark image")
+    ap.add_argument("--crop", help="L,T,R,B pixel box isolating the mark (optional)")
+    ap.add_argument("--out", default="public/icons", help="Output dir for the icons")
+    ap.add_argument("--coverage", type=float, default=0.78,
+                    help="Mark size as fraction of icon width (default 0.78)")
     args = ap.parse_args()
 
-    if not 0.1 <= args.coverage <= 1.0:
-        raise SystemExit("--coverage must be between 0.1 and 1.0")
+    import os
+    crop = tuple(int(x) for x in args.crop.split(",")) if args.crop else None
+    mark = load_mark(args.art, crop)
+    out = args.out.rstrip("/")
+    parent = os.path.dirname(out) or "."
+    os.makedirs(out, exist_ok=True)
 
-    if not 0 <= args.alpha_floor <= 254:
-        raise SystemExit("--alpha-floor must be between 0 and 254")
+    # Home-screen / bordered icons
+    bordered(mark, 180, args.coverage).convert("RGB").save(f"{out}/apple-touch-icon.png")
+    bordered(mark, 512, args.coverage).convert("RGB").save(f"{out}/icon-tile-512.png")
+    # PWA icons: no border so Android's maskable crop can't shave the frame;
+    # slightly smaller mark to stay in the maskable safe zone.
+    bordered(mark, 512, min(args.coverage, 0.74), border=False).save(f"{out}/icon-512.png")
+    bordered(mark, 192, min(args.coverage, 0.74), border=False).save(f"{out}/icon-192.png")
 
-    mark = load_mark(Path(args.art), args.crop, args.alpha_floor)
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    # Favicons (bare mark, filling the frame for legibility at tiny sizes)
+    fav = bordered(mark, 96, 0.92, border=False).convert("RGB")
+    fav.resize((32, 32), Image.LANCZOS).save(f"{parent}/favicon-32.png")
+    fav.resize((16, 16), Image.LANCZOS).save(f"{parent}/favicon-16.png")
+    fav.save(f"{parent}/favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
 
-    tile512 = render_tile(mark, 512, args.coverage)
-
-    written = []
-
-    def save(img: Image.Image, name: str) -> None:
-        path = out / name
-        img.save(path)
-        written.append(f"{name}  {img.size[0]}x{img.size[1]}")
-
-    save(flatten(render_tile(mark, 180, args.coverage)), "apple-touch-icon.png")
-    save(flatten(render_tile(mark, 192, args.coverage)), "icon-192.png")
-    save(flatten(tile512), "icon-512.png")
-    save(flatten(tile512), "icon-tile-512.png")
-    save(flatten(render_maskable(mark, 512, args.coverage)), "icon-maskable-512.png")
-
-    fav32 = flatten(render_tile(mark, 32, args.coverage))
-    fav16 = flatten(render_tile(mark, 16, args.coverage))
-    save(fav32, "favicon-32.png")
-    save(fav16, "favicon-16.png")
-
-    ico = out / "favicon.ico"
-    flatten(render_tile(mark, 48, args.coverage)).save(
-        ico, sizes=[(16, 16), (32, 32), (48, 48)]
-    )
-    written.append("favicon.ico  16/32/48")
-
-    print(f"mark {mark.width}x{mark.height} · coverage {args.coverage}")
-    for line in written:
-        print("  " + line)
-    if mark.width < 512:
-        print(
-            f"\nnote: the source mark is only {mark.width}px wide, so the large "
-            "icons are upscaled. Re-run with higher-resolution art if you have it."
-        )
+    print("wrote:")
+    for f in ["apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-tile-512.png"]:
+        print(f"  {out}/{f}")
+    for f in ["favicon.ico", "favicon-32.png", "favicon-16.png"]:
+        print(f"  {parent}/{f}")
 
 
 if __name__ == "__main__":

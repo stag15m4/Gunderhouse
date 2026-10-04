@@ -38,14 +38,6 @@ favicon set (`favicon.ico`, `favicon-16.png`, `favicon-32.png`).
 | Corner radius   | **22.5%** of icon side (matches iOS squircle) |
 | Supersample     | 3× then downscale (clean edges)              |
 
-### `--alpha-floor`, when the art carries a glow
-
-Logo art often has a wide, near-white halo at very low alpha. It is invisible
-on a white page and obvious as grey haze on a near-black plate. `--alpha-floor`
-drops everything under the given alpha and rescales what remains, so genuine
-antialiased edges stay smooth rather than being cut to a hard line. It defaults
-to `0` — off — so it changes nothing for art that doesn't need it.
-
 **The only knob you tune per app is `--coverage`** — the mark's size as a
 fraction of icon width (default `0.78`). A wide mark may want `~0.74`; a
 compact mark `~0.82`. Pick whatever makes the mark sit balanced inside the
@@ -55,19 +47,38 @@ gold frame. Leave everything else at the defaults.
 
 ```bash
 python3 scripts/make_icon.py \
-  --art public/brand/mark.webp --out public/icons --alpha-floor 96
+  --art public/brand/icon-art.png --out public/icons --coverage 0.88
 ```
 
-`--coverage` left at the default. The floor is 96 because the mark art carries
-a broad white glow — 21,000-odd pixels under alpha 60, averaging RGB
-(255, 254, 230) — which read as a grey halo on the plate.
+### Preparing the art
+
+The script loads art as **RGB and discards any alpha** — it expects a picture
+of the mark already sitting on a dark background, and feathers the rectangle
+edge so it melts into the tile. Gunderhouse's `public/brand/mark.webp` is RGBA
+with a transparent surround, so feeding it in directly produces a grey box:
+its transparent pixels carry RGB (121, 121, 120) underneath.
+
+`public/brand/icon-art.png` is the prepared source, built once from mark.webp:
+
+1. Alpha floored at 96 and rescaled. The mark art carries a wide near-white
+   glow — 21,000-odd pixels under alpha 60, averaging RGB (255, 254, 230).
+   Invisible on a white page, obvious as grey haze on a near-black plate.
+2. Composited onto `#0a0a0a`.
+3. Trimmed to the mark, then padded 7% — just clear of the script's 5.3%
+   feather, so the feather falls on empty plate instead of eating the mark.
+
+Regenerate it with `scripts/make_icon_art.py` if mark.webp ever changes.
+
+### Why coverage is 0.88, not 0.78
+
+`--coverage` measures the whole art rectangle, and this art carries a 7%
+padding ring. 0.88 of the rectangle puts the mark itself at roughly 0.79 of
+the icon — the template's intent. At 0.94 the circle crowds the gold border;
+at 0.82 it floats.
 
 The source mark is only ~210px wide, so the 512 renders are upscaled and a
 little soft at full size. Fine at the sizes anyone actually sees it; worth
 re-running against the original high-resolution art if that turns up.
-
-The favicons live at the web root (`public/favicon.ico` and friends) rather
-than in `public/icons`, which is where browsers look for them by default.
 
 ## Wiring it into a Next.js app
 
