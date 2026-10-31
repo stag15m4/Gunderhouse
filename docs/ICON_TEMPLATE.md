@@ -46,35 +46,50 @@ gold frame. Leave everything else at the defaults.
 ## What Gunderhouse used
 
 ```bash
+python3 scripts/make_icon_art.py          # mark.webp -> public/brand/icon-art.png
 python3 scripts/make_icon.py \
-  --art public/brand/icon-art.png --out public/icons --coverage 0.88
+  --art public/brand/icon-art.png --out public/icons --coverage 0.98
 ```
+
+`make_icon_art.py` prints the coverage to use; it changes if you change `--margin`.
 
 ### Preparing the art
 
-The script loads art as **RGB and discards any alpha** — it expects a picture
+`make_icon.py` loads art as **RGB and discards any alpha** — it expects a picture
 of the mark already sitting on a dark background, and feathers the rectangle
 edge so it melts into the tile. Gunderhouse's `public/brand/mark.webp` is RGBA
-with a transparent surround, so feeding it in directly produces a grey box:
-its transparent pixels carry RGB (121, 121, 120) underneath.
+with a transparent surround, so feeding it in directly produces a grey box: its
+transparent pixels carry RGB (121, 121, 120) underneath.
 
-`public/brand/icon-art.png` is the prepared source, built once from mark.webp:
+`make_icon_art.py` prepares a source that suits the shared script instead of
+forking the shared script to suit the art. It does three things.
 
-1. Alpha floored at 96 and rescaled. The mark art carries a wide near-white
-   glow — 21,000-odd pixels under alpha 60, averaging RGB (255, 254, 230).
-   Invisible on a white page, obvious as grey haze on a near-black plate.
-2. Composited onto `#0a0a0a`.
-3. Trimmed to the mark, then padded 7% — just clear of the script's 5.3%
-   feather, so the feather falls on empty plate instead of eating the mark.
+**1. Removes the haze by shape.** The mark carries a wide, cloudy white haze
+that reads as grey smoke on a near-black plate. A top-hat transform keeps
+features narrower than `--haze-size` (21px: strokes, the steps under the G) and
+discards broad smooth fields. Two approaches that did *not* work, so nobody
+repeats them:
 
-Regenerate it with `scripts/make_icon_art.py` if mark.webp ever changes.
+- *Cutting everything under a fixed alpha.* Removed the haze and also the soft
+  edges of the steps under the G, which sit in the same alpha band as the haze.
+- *Cutting by colour (saturation).* The haze is gold-tinted in places, so the
+  smoke came back as olive patches around the G.
 
-### Why coverage is 0.88, not 0.78
+**2. Puts a glow back on purpose.** The other icons in the suite have a warm
+halo. A blurred, gold-tinted (`#C9A04C`) copy of the cleaned mark, composited
+behind it, gives Gunderhouse the same one — as a deliberate effect rather than
+the accidental grey cloud. `--glow 0` turns it off.
 
-`--coverage` measures the whole art rectangle, and this art carries a 7%
-padding ring. 0.88 of the rectangle puts the mark itself at roughly 0.79 of
-the icon — the template's intent. At 0.94 the circle crowds the gold border;
-at 0.82 it floats.
+**3. Drops residual noise.** A small knee (`--knee 0.08`) removes the grain the
+top-hat leaves in empty areas, and a stray speck under the steps (the tail of
+the haze, peaking at 7% alpha).
+
+### Why coverage is 0.98
+
+`--coverage` measures the whole art rectangle, padding included, and the art
+carries a 12% margin on every side for the glow to fade into. 0.98 of that
+rectangle puts the mark itself at about 0.79 of the icon — the template's
+intent. A larger glow needs a larger margin, which needs a larger coverage.
 
 The source mark is only ~210px wide, so the 512 renders are upscaled and a
 little soft at full size. Fine at the sizes anyone actually sees it; worth
